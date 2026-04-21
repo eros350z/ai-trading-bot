@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
 AI Trading Bot - Claude Powered
-يحلل الذهب والبيتكوين كل 30 دقيقة ويتداول تلقائياً
+يحلل الذهب والبيتكوين كل 15 دقيقة ويتداول تلقائياً
 """
 
 import requests
 import schedule
 import time
 import json
+import threading
 from datetime import datetime
+from flask import Flask, jsonify
 import pytz
 
 # ==========================================
@@ -20,23 +22,60 @@ GEMINI_API   = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1
 GEMINI_KEY   = "AIzaSyA_0Pv9QdxyIcGdCXjVqWFf2IXlu2qBVsE"
 TIMEZONE     = "Asia/Kuwait"
 
-# إعدادات المخاطرة
-ACCOUNT_BALANCE  = 2000.0   # رأس المال
-RISK_PERCENT     = 1.0      # نسبة المخاطرة لكل صفقة
-MAX_DAILY_LOSS   = 2.0      # أقصى خسارة يومية %
-MAX_DRAWDOWN     = 10.0     # أقصى drawdown %
+ACCOUNT_BALANCE  = 2000.0
+RISK_PERCENT     = 1.0
+MAX_DAILY_LOSS   = 2.0
+MAX_DRAWDOWN     = 10.0
 
-# الرموز
 SYMBOLS = ["XAUUSD", "BTCUSD"]
 
-# تتبع الخسائر
 daily_pnl     = 0.0
 start_balance = ACCOUNT_BALANCE
 day_start_bal = ACCOUNT_BALANCE
 last_day      = datetime.now().date()
 
 # ==========================================
-# جلب السعر والبيانات
+# تخزين آخر Signal لكل رمز
+# ==========================================
+latest_signals = {
+    "XAUUSD": {"action": "WAIT", "id": 0},
+    "BTCUSD": {"action": "WAIT", "id": 0},
+}
+signal_counter = 0
+
+# ==========================================
+# Flask Server
+# ==========================================
+app = Flask(__name__)
+
+@app.route("/signal/<symbol>", methods=["GET"])
+def get_signal(symbol):
+    symbol = symbol.upper()
+    if symbol in latest_signals:
+        return jsonify(latest_signals[symbol])
+    return jsonify({"action": "WAIT", "id": 0})
+
+@app.route("/status", methods=["GET"])
+def status():
+    kuwait_tz = pytz.timezone(TIMEZONE)
+    now = datetime.now(kuwait_tz)
+    return jsonify({
+        "status": "running",
+        "time": now.strftime("%Y-%m-%d %H:%M"),
+        "balance": ACCOUNT_BALANCE,
+        "daily_pnl": round(daily_pnl, 2),
+        "signals": latest_signals
+    })
+
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({"bot": "AI Trading Bot", "status": "online"})
+
+def run_flask():
+    app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
+
+# ==========================================
+# جلب السعر
 # ==========================================
 def get_market_data(symbol):
     try:
@@ -51,50 +90,38 @@ def get_market_data(symbol):
         closes = result["indicators"]["quote"][0]["close"]
         highs  = result["indicators"]["quote"][0]["high"]
         lows   = result["indicators"]["quote"][0]["low"]
-        volumes= result["indicators"]["quote"][0]["volume"]
 
-        # تنظيف القيم None
-        closes  = [x for x in closes  if x is not None]
-        highs   = [x for x in highs   if x is not None]
-        lows    = [x for x in lows    if x is not None]
+        closes = [x for x in closes if x is not None]
+        highs  = [x for x in highs  if x is not None]
+        lows   = [x for x in lows   if x is not None]
 
         if len(closes) < 10:
             return None
 
-        price   = meta["regularMarketPrice"]
-        prev    = meta["chartPreviousClose"]
-        change  = price - prev
-        pct     = (change / prev) * 100
+        price = meta["regularMarketPrice"]
+        prev  = meta["chartPreviousClose"]
+        change = price - prev
+        pct   = (change / prev) * 100
 
-        # حساب المؤشرات
         ema8  = calc_ema(closes, 8)
         ema21 = calc_ema(closes, 21)
         rsi   = calc_rsi(closes, 14)
         atr   = calc_atr(highs, lows, closes, 14)
-
-        # آخر 5 شموع للتحليل
         last5 = [round(c, 2) for c in closes[-5:]]
 
         return {
-            "symbol":  symbol,
-            "price":   round(price, 2),
-            "change":  round(change, 2),
-            "pct":     round(pct, 2),
-            "ema8":    round(ema8, 2),
-            "ema21":   round(ema21, 2),
-            "rsi":     round(rsi, 1),
-            "atr":     round(atr, 2),
-            "high24":  round(max(highs[-48:]), 2) if len(highs) >= 48 else round(max(highs), 2),
-            "low24":   round(min(lows[-48:]), 2)  if len(lows)  >= 48 else round(min(lows),  2),
-            "last5":   last5,
+            "symbol": symbol, "price": round(price, 2),
+            "change": round(change, 2), "pct": round(pct, 2),
+            "ema8": round(ema8, 2), "ema21": round(ema21, 2),
+            "rsi": round(rsi, 1), "atr": round(atr, 2),
+            "high24": round(max(highs[-48:]), 2) if len(highs) >= 48 else round(max(highs), 2),
+            "low24":  round(min(lows[-48:]),  2) if len(lows)  >= 48 else round(min(lows),  2),
+            "last5": last5,
         }
     except Exception as e:
         print(f"❌ Error getting {symbol} data: {e}")
         return None
 
-# ==========================================
-# حساب المؤشرات
-# ==========================================
 def calc_ema(data, period):
     if len(data) < period:
         return data[-1]
@@ -130,36 +157,26 @@ def calc_atr(highs, lows, closes, period=14):
         trs.append(tr)
     return sum(trs[-period:]) / period
 
-# ==========================================
-# جلب الأخبار المهمة
-# ==========================================
 def get_news_warning():
     try:
         kuwait_tz = pytz.timezone(TIMEZONE)
         now = datetime.now(kuwait_tz)
         hour = now.hour
-
-        # أوقات الأخبار المهمة (بتوقيت الكويت)
         high_impact_hours = {
             16: "NFP / CPI / Fed Decision",
             17: "US Economic Data",
             15: "US Market Open",
             21: "FOMC Minutes",
         }
-
         if hour in high_impact_hours:
-            return f"⚠️ High Impact News Expected: {high_impact_hours[hour]}"
+            return f"High Impact News Expected: {high_impact_hours[hour]}"
         return None
     except:
         return None
 
-# ==========================================
-# Gemini AI - قرار التداول
-# ==========================================
 def ask_gemini(market_data_list):
     try:
         context = "You are an expert forex and crypto trader. Analyze the following market data and make a trading decision.\n\n"
-
         for data in market_data_list:
             if data is None:
                 continue
@@ -171,7 +188,6 @@ RSI: {data['rsi']} | ATR: {data['atr']}
 Last 5 closes: {data['last5']}
 ---
 """
-
         context += f"""
 Account Balance: ${ACCOUNT_BALANCE}
 Risk per trade: {RISK_PERCENT}%
@@ -196,47 +212,32 @@ Respond ONLY with a valid JSON array, no markdown, no explanation:
             json={"contents": [{"parts": [{"text": context}]}]},
             timeout=30
         )
-
         if response.status_code == 200:
-            text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
-            text = text.strip()
+            text = response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
             if "```" in text:
                 text = text.split("```")[1]
                 if text.startswith("json"):
                     text = text[4:]
-            decisions = json.loads(text.strip())
-            return decisions
+            return json.loads(text.strip())
         else:
-            print(f"❌ Gemini API Error: {response.status_code} | {response.text}")
+            print(f"❌ Gemini API Error: {response.status_code}")
             return None
-
     except Exception as e:
         print(f"❌ Gemini Error: {e}")
         return None
 
-# ==========================================
-# حساب حجم اللوت
-# ==========================================
 def calc_lot(balance, risk_pct, sl_points, symbol):
     risk_amount = balance * (risk_pct / 100)
     if symbol == "XAUUSD":
-        # XAUUSD: $1 per 0.01 lot per point
         lot = risk_amount / (sl_points * 1.0)
     else:
-        # BTCUSD: approximate
         lot = risk_amount / (sl_points * 0.001)
+    return round(max(0.01, min(lot, 2.0)), 2)
 
-    lot = round(max(0.01, min(lot, 2.0)), 2)
-    return lot
-
-# ==========================================
-# إرسال تيليغرام
-# ==========================================
 def send_telegram(message):
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = {"chat_id": CHAT_ID, "text": message}
-        r = requests.post(url, json=payload, timeout=15)
+        r = requests.post(url, json={"chat_id": CHAT_ID, "text": message}, timeout=15)
         if r.status_code == 200:
             print(f"✅ Telegram sent | {datetime.now().strftime('%H:%M:%S')}")
         else:
@@ -244,31 +245,28 @@ def send_telegram(message):
     except Exception as e:
         print(f"❌ Telegram exception: {e}")
 
-# ==========================================
-# إرسال أمر للـ EA على MT5
-# ==========================================
-def send_order_to_mt5(decision, lot):
-    """
-    يكتب الأمر في ملف يقرأه الـ EA على MT5
-    الـ EA راح يتحقق من الملف كل 5 ثواني
-    """
-    order = {
-        "symbol":  decision["symbol"],
-        "action":  decision["action"],
-        "lot":     lot,
-        "entry":   decision["entry"],
-        "sl":      decision["sl"],
-        "tp1":     decision["tp1"],
-        "tp2":     decision["tp2"],
-        "tp3":     decision["tp3"],
-        "time":    datetime.now().strftime("%Y.%m.%d %H:%M")
+def update_signal(decision, lot):
+    global signal_counter
+    signal_counter += 1
+    symbol = decision["symbol"]
+    latest_signals[symbol] = {
+        "id":         signal_counter,
+        "symbol":     symbol,
+        "action":     decision["action"],
+        "lot":        lot,
+        "entry":      decision["entry"],
+        "sl":         decision["sl"],
+        "tp1":        decision["tp1"],
+        "tp2":        decision["tp2"],
+        "tp3":        decision["tp3"],
+        "time":       datetime.now().strftime("%Y.%m.%d %H:%M"),
+        "reason":     decision.get("reason", ""),
+        "confidence": decision.get("confidence", 0)
     }
-    # سيتم ربطه مع الـ EA لاحقاً
-    print(f"📤 Order: {json.dumps(order, indent=2)}")
-    return order
+    print(f"📡 Signal updated | {symbol} | {decision['action']} | ID: {signal_counter}")
 
 # ==========================================
-# الدورة الرئيسية - كل 30 دقيقة
+# الدورة الرئيسية
 # ==========================================
 def run_analysis():
     global daily_pnl, day_start_bal, last_day
@@ -279,35 +277,30 @@ def run_analysis():
     print(f"🔄 Analysis | {now.strftime('%Y-%m-%d %H:%M')} Kuwait")
     print(f"{'='*50}")
 
-    # تصفير اليوم الجديد
     if now.date() != last_day:
-        daily_pnl   = 0.0
+        daily_pnl = 0.0
         day_start_bal = ACCOUNT_BALANCE
-        last_day    = now.date()
+        last_day = now.date()
         print("📅 New day reset")
 
-    # ويك اند - الذهب يوقف، البيتكوين يكمل
     if now.weekday() >= 5:
         global SYMBOLS
-        SYMBOLS = ["BTCUSD"]  # فقط البيتكوين في الويك اند
+        SYMBOLS = ["BTCUSD"]
         print("📅 Weekend - Gold stopped, BTC continues")
     else:
         SYMBOLS = ["XAUUSD", "BTCUSD"]
 
-    # تحقق من الخسارة اليومية
     if daily_pnl <= -MAX_DAILY_LOSS:
         print(f"🛑 Daily loss limit reached: {daily_pnl}%")
         send_telegram(f"🛑 AI Bot: Daily loss limit {MAX_DAILY_LOSS}% reached. Stopped for today.")
         return
 
-    # تحقق من الأخبار
     news = get_news_warning()
     if news:
         print(f"⚠️ News warning: {news}")
         send_telegram(f"⚠️ AI Bot paused - {news}")
         return
 
-    # جلب البيانات
     market_data = []
     for symbol in SYMBOLS:
         data = get_market_data(symbol)
@@ -319,39 +312,34 @@ def run_analysis():
         print("❌ No market data available")
         return
 
-    # سؤال Claude
-    print("🤖 Asking Claude AI...")
+    print("🤖 Asking Gemini AI...")
     decisions = ask_gemini(market_data)
 
     if not decisions:
-        print("❌ No decision from Claude")
+        print("❌ No decision from AI")
         return
 
-    # تنفيذ القرارات
     for decision in decisions:
-        symbol  = decision.get("symbol")
-        action  = decision.get("action")
-        reason  = decision.get("reason", "")
-        conf    = decision.get("confidence", 0)
+        symbol = decision.get("symbol")
+        action = decision.get("action")
+        reason = decision.get("reason", "")
+        conf   = decision.get("confidence", 0)
 
         print(f"\n📋 {symbol}: {action} | Confidence: {conf}/10 | {reason}")
 
         if action == "WAIT":
             continue
 
-        # تحقق من الثقة - مو أقل من 7
         if conf < 7:
             print(f"⏳ Confidence too low ({conf}/10) - Skip")
             continue
 
-        # حساب الـ Lot
         sl_pts = abs(decision["entry"] - decision["sl"])
         lot = calc_lot(ACCOUNT_BALANCE, RISK_PERCENT, sl_pts, symbol)
 
-        # إرسال الأمر
-        order = send_order_to_mt5(decision, lot)
+        # ✅ تحديث Signal للـ EA
+        update_signal(decision, lot)
 
-        # إرسال تيليغرام
         icon = "🟢" if action == "BUY" else "🔴"
         msg = f"""{icon} AI Trading Signal
 Symbol: {symbol}
@@ -368,18 +356,13 @@ TP2: {decision['tp2']}
 TP3: {decision['tp3']}
 ---
 {now.strftime('%Y-%m-%d %H:%M')} Kuwait"""
-
         send_telegram(msg)
 
-# ==========================================
-# تقرير يومي
-# ==========================================
 def daily_report():
     kuwait_tz = pytz.timezone(TIMEZONE)
     now = datetime.now(kuwait_tz)
     if now.weekday() >= 5:
         return
-
     msg = f"""📊 Daily AI Trading Report
 Date: {now.strftime('%Y-%m-%d')}
 ---
@@ -390,7 +373,6 @@ Status: {'🟢 Active' if daily_pnl > -MAX_DAILY_LOSS else '🛑 Stopped'}
 Symbols: {', '.join(SYMBOLS)}
 Interval: Every 15 minutes
 Risk per trade: {RISK_PERCENT}%"""
-
     send_telegram(msg)
 
 # ==========================================
@@ -411,11 +393,14 @@ if __name__ == "__main__":
         run_analysis()
         sys.exit(0)
 
-    # جدولة
-    schedule.every(15).minutes.do(run_analysis)
-    schedule.every().day.at("20:00").do(daily_report)  # UTC = 11 PM Kuwait
+    # ✅ Flask في thread منفصل
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    print("🌐 Signal server running on port 8080")
 
-    # تشغيل فوري عند البداية
+    schedule.every(15).minutes.do(run_analysis)
+    schedule.every().day.at("20:00").do(daily_report)
+
     run_analysis()
 
     print("\n✅ Bot running... Press Ctrl+C to stop")
