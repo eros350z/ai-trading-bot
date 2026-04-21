@@ -19,7 +19,7 @@ import pytz
 BOT_TOKEN    = "8764834987:AAHZ_dC1TmEfTO-Pbmd1AyZQcuHsNFQZy64"
 CHAT_ID      = "6652508619"
 GEMINI_API   = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-GEMINI_KEY   = "AIzaSyA_0Pv9QdxyIcGdCXjVqWFf2IXlu2qBVsE"
+GEMINI_KEY   = "AIzaSyB3ZqFdybdyB415buR6IYRYdqs99SA8emI"
 TIMEZONE     = "Asia/Kuwait"
 
 ACCOUNT_BALANCE  = 2000.0
