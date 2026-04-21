@@ -4,6 +4,7 @@ AI Trading Bot - Claude Powered
 يحلل الذهب والبيتكوين كل 15 دقيقة ويتداول تلقائياً
 """
 
+import os
 import requests
 import schedule
 import time
@@ -19,7 +20,7 @@ import pytz
 BOT_TOKEN    = "8764834987:AAHZ_dC1TmEfTO-Pbmd1AyZQcuHsNFQZy64"
 CHAT_ID      = "6652508619"
 CLAUDE_API   = "https://api.anthropic.com/v1/messages"
-CLAUDE_KEY   = "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"
+CLAUDE_KEY   = os.environ.get("CLAUDE_KEY", "")
 TIMEZONE     = "Asia/Kuwait"
 
 ACCOUNT_BALANCE  = 2000.0
