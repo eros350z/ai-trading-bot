@@ -18,7 +18,7 @@ import pytz
 # ==========================================
 BOT_TOKEN    = "8764834987:AAHZ_dC1TmEfTO-Pbmd1AyZQcuHsNFQZy64"
 CHAT_ID      = "6652508619"
-GEMINI_API   = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+GEMINI_API   = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 GEMINI_KEY   = "AIzaSyA_0Pv9QdxyIcGdCXjVqWFf2IXlu2qBVsE"
 TIMEZONE     = "Asia/Kuwait"
 
@@ -226,7 +226,7 @@ Respond ONLY with a valid JSON array, no markdown, no explanation:
                     text = text[4:]
             return json.loads(text.strip())
         else:
-            print(f"❌ Gemini API Error: {response.status_code}")
+            print(f"❌ Gemini API Error: {response.status_code} | {response.text[:300]}")
             return None
     except Exception as e:
         print(f"❌ Gemini Error: {e}")
