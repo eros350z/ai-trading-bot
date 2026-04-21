@@ -190,14 +190,7 @@ def ask_gemini(market_data_list):
         for data in market_data_list:
             if data is None:
                 continue
-            context += f"""SYMBOL: {data['symbol']}
-Price: {data['price']} | Change: {data['change']} ({data['pct']}%)
-EMA8: {data['ema8']} | EMA21: {data['ema21']}
-RSI: {data['rsi']} | ATR: {data['atr']}
-24h High: {data['high24']} | 24h Low: {data['low24']}
-Last 5 closes: {data['last5']}
----
-"""
+            context += f"{data['symbol']}|{data['price']}|RSI:{data['rsi']}|EMA8:{data['ema8']}|EMA21:{data['ema21']}|ATR:{data['atr']}|H:{data['high24']}|L:{data['low24']}\n"
         context += f"""
 Account Balance: ${ACCOUNT_BALANCE}
 Risk per trade: {RISK_PERCENT}%
