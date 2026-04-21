@@ -21,6 +21,7 @@ BOT_TOKEN    = "8764834987:AAHZ_dC1TmEfTO-Pbmd1AyZQcuHsNFQZy64"
 CHAT_ID      = "6652508619"
 CLAUDE_API   = "https://api.anthropic.com/v1/messages"
 CLAUDE_KEY   = os.environ.get("CLAUDE_KEY", "")
+print(f"🔑 CLAUDE_KEY length: {len(CLAUDE_KEY)} chars")
 TIMEZONE     = "Asia/Kuwait"
 
 ACCOUNT_BALANCE  = 2000.0
@@ -242,8 +243,12 @@ def calc_lot(balance, risk_pct, sl_points, symbol):
         lot = risk_amount / (sl_points * 10.0)
     elif symbol == "ETHUSD":
         lot = risk_amount / (sl_points * 0.01)
+        lot = round(max(0.1, min(lot, 10.0)), 2)  # min 0.1 for ETHUSD
+        return lot
     else:  # BTCUSD
         lot = risk_amount / (sl_points * 0.001)
+    if symbol == 'ETHUSD':
+        return round(max(0.1, min(lot, 10.0)), 2)
     return round(max(0.01, min(lot, 2.0)), 2)
 
 def send_telegram(message):
