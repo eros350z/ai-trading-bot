@@ -388,7 +388,7 @@ Daily P&L: {round(daily_pnl, 2)}%
 Status: {'🟢 Active' if daily_pnl > -MAX_DAILY_LOSS else '🛑 Stopped'}
 ---
 Symbols: {', '.join(SYMBOLS)}
-Interval: Every 30 minutes
+Interval: Every 15 minutes
 Risk per trade: {RISK_PERCENT}%"""
 
     send_telegram(msg)
@@ -401,7 +401,7 @@ if __name__ == "__main__":
 
     print("🤖 AI Trading Bot - Claude Powered")
     print(f"📊 Symbols: {', '.join(SYMBOLS)}")
-    print(f"⏱️  Interval: Every 30 minutes")
+    print(f"⏱️  Interval: Every 15 minutes")
     print(f"💰 Balance: ${ACCOUNT_BALANCE} | Risk: {RISK_PERCENT}%")
     print(f"🛡️  Max Daily Loss: {MAX_DAILY_LOSS}% | Max DD: {MAX_DRAWDOWN}%")
     print("="*50)
