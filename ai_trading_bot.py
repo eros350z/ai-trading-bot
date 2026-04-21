@@ -72,9 +72,19 @@ def status():
         "signals": latest_signals
     })
 
+@app.route("/balance", methods=["POST"])
+def update_balance():
+    global real_balance
+    from flask import request
+    data = request.get_json()
+    if data and "balance" in data:
+        real_balance = float(data["balance"])
+        print(f"💰 Balance updated from MT5: ${real_balance}")
+    return jsonify({"status": "ok"})
+
 @app.route("/", methods=["GET"])
 def home():
-    return jsonify({"bot": "AI Trading Bot", "status": "online"})
+    return jsonify({"bot": "AI Trading Bot", "status": "online", "balance": real_balance})
 
 def run_flask():
     app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
@@ -352,7 +362,7 @@ def run_analysis():
             continue
 
         sl_pts = abs(decision["entry"] - decision["sl"])
-        lot = calc_lot(ACCOUNT_BALANCE, RISK_PERCENT, sl_pts, symbol)
+        lot = calc_lot(real_balance, RISK_PERCENT, sl_pts, symbol)
 
         # ✅ تحديث Signal للـ EA
         update_signal(decision, lot)
