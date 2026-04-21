@@ -18,8 +18,8 @@ import pytz
 # ==========================================
 BOT_TOKEN    = "8764834987:AAHZ_dC1TmEfTO-Pbmd1AyZQcuHsNFQZy64"
 CHAT_ID      = "6652508619"
-GEMINI_API   = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-GEMINI_KEY   = "AIzaSyB3ZqFdybdyB415buR6IYRYdqs99SA8emI"
+CLAUDE_API   = "https://api.anthropic.com/v1/messages"
+CLAUDE_KEY   = "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"
 TIMEZONE     = "Asia/Kuwait"
 
 ACCOUNT_BALANCE  = 2000.0
@@ -192,16 +192,9 @@ def ask_gemini(market_data_list):
                 continue
             context += f"{data['symbol']}|{data['price']}|RSI:{data['rsi']}|EMA8:{data['ema8']}|EMA21:{data['ema21']}|ATR:{data['atr']}|H:{data['high24']}|L:{data['low24']}\n"
         context += f"""
-Account Balance: ${ACCOUNT_BALANCE}
-Risk per trade: {RISK_PERCENT}%
-Max daily loss: {MAX_DAILY_LOSS}%
-Daily P&L so far: {round(daily_pnl, 2)}%
-
-Rules:
-- Only trade with clear trend (EMA8 > EMA21 = uptrend, EMA8 < EMA21 = downtrend)
-- RSI: Buy only 40-65, Sell only 35-60
-- Avoid trading if RSI > 75 or < 25
-- SL = 1.5 x ATR, TP1 = 1.5 x ATR, TP2 = 2.5 x ATR, TP3 = 4 x ATR
+Balance:${ACCOUNT_BALANCE} Risk:{RISK_PERCENT}% DailyPnL:{round(daily_pnl,2)}%
+Rules: EMA8>EMA21=uptrend, RSI buy:40-65 sell:35-60, avoid RSI>75 or <25
+SL=1.5xATR, TP1=1.5xATR, TP2=2.5xATR, TP3=4xATR
 
 Respond ONLY with a valid JSON array, no markdown, no explanation:
 [
@@ -213,23 +206,31 @@ Respond ONLY with a valid JSON array, no markdown, no explanation:
 ]"""
 
         response = requests.post(
-            f"{GEMINI_API}?key={GEMINI_KEY}",
-            headers={"Content-Type": "application/json"},
-            json={"contents": [{"parts": [{"text": context}]}]},
+            CLAUDE_API,
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": CLAUDE_KEY,
+                "anthropic-version": "2023-06-01"
+            },
+            json={
+                "model": "claude-haiku-4-5-20251001",
+                "max_tokens": 1000,
+                "messages": [{"role": "user", "content": context}]
+            },
             timeout=30
         )
         if response.status_code == 200:
-            text = response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+            text = response.json()["content"][0]["text"].strip()
             if "```" in text:
                 text = text.split("```")[1]
                 if text.startswith("json"):
                     text = text[4:]
             return json.loads(text.strip())
         else:
-            print(f"❌ Gemini API Error: {response.status_code} | {response.text[:300]}")
+            print(f"❌ Claude API Error: {response.status_code} | {response.text[:300]}")
             return None
     except Exception as e:
-        print(f"❌ Gemini Error: {e}")
+        print(f"❌ Claude Error: {e}")
         return None
 
 def calc_lot(balance, risk_pct, sl_points, symbol):
@@ -322,11 +323,11 @@ def run_analysis():
         print("❌ No market data available")
         return
 
-    print("🤖 Asking Gemini AI...")
+    print("🤖 Asking Claude AI...")
     decisions = ask_gemini(market_data)
 
     if not decisions:
-        print("❌ No decision from AI")
+        print("❌ No decision from Claude")
         return
 
     for decision in decisions:
