@@ -244,19 +244,34 @@ Respond ONLY with a valid JSON array, no markdown, no explanation:
 
 def calc_lot(balance, risk_pct, sl_points, symbol):
     risk_amount = balance * (risk_pct / 100)
+
+    # حد أقصى للـ lot بناءً على الرصيد الحقيقي
+    if balance < 500:
+        max_lot = 0.01
+    elif balance < 1000:
+        max_lot = 0.05
+    elif balance < 3000:
+        max_lot = 0.1
+    elif balance < 5000:
+        max_lot = 0.5
+    else:
+        max_lot = 1.0
+
     if symbol == "XAUUSD":
         lot = risk_amount / (sl_points * 1.0)
+        min_lot = 0.01
     elif symbol == "USDJPY":
         lot = risk_amount / (sl_points * 10.0)
+        min_lot = 0.01
     elif symbol == "ETHUSD":
         lot = risk_amount / (sl_points * 0.01)
-        lot = round(max(0.1, min(lot, 2.0)), 2)  # min 0.1, max 2.0 for ETHUSD
-        return lot
+        min_lot = 0.1
+        max_lot = max(max_lot, 0.1)
     else:  # BTCUSD
         lot = risk_amount / (sl_points * 0.001)
-    if symbol == 'ETHUSD':
-        return round(max(0.1, min(lot, 2.0)), 2)
-    return round(max(0.01, min(lot, 2.0)), 2)
+        min_lot = 0.01
+
+    return round(max(min_lot, min(lot, max_lot)), 2)
 
 def send_telegram(message):
     try:
