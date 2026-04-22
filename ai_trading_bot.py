@@ -253,12 +253,12 @@ def calc_lot(balance, risk_pct, sl_points, symbol):
         lot = risk_amount / (sl_points * 10.0)
     elif symbol == "ETHUSD":
         lot = risk_amount / (sl_points * 0.01)
-        lot = round(max(0.1, min(lot, 10.0)), 2)  # min 0.1 for ETHUSD
+        lot = round(max(0.1, min(lot, 2.0)), 2)  # min 0.1, max 2.0 for ETHUSD
         return lot
     else:  # BTCUSD
         lot = risk_amount / (sl_points * 0.001)
     if symbol == 'ETHUSD':
-        return round(max(0.1, min(lot, 10.0)), 2)
+        return round(max(0.1, min(lot, 2.0)), 2)
     return round(max(0.01, min(lot, 2.0)), 2)
 
 def send_telegram(message):
