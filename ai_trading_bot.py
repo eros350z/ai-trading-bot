@@ -36,6 +36,17 @@ start_balance = ACCOUNT_BALANCE
 day_start_bal = ACCOUNT_BALANCE
 last_day      = datetime.now().date()
 
+# رصيد حقيقي من MT5
+real_balance = ACCOUNT_BALANCE
+
+# الصفقات المفتوحة من MT5
+open_positions = {
+    "XAUUSD": False,
+    "BTCUSD": False,
+    "USDJPY": False,
+    "ETHUSD": False,
+}
+
 # ==========================================
 # تخزين آخر Signal لكل رمز
 # ==========================================
