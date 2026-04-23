@@ -214,7 +214,7 @@ def ask_gemini(market_data_list):
         context += f"""
 Balance:${ACCOUNT_BALANCE} Risk:{RISK_PERCENT}% DailyPnL:{round(daily_pnl,2)}%
 Rules: EMA8>EMA21=uptrend, RSI buy:40-65 sell:35-60, avoid RSI>75 or <25
-SL=1.5xATR, TP1=1.5xATR, TP2=2.5xATR, TP3=4xATR
+SL=0.8xATR, TP1=1.5xATR, TP2=2.5xATR, TP3=4xATR
 
 Respond ONLY with a valid JSON array, no markdown, no explanation:
 [
@@ -346,8 +346,7 @@ def run_analysis():
 
     news = get_news_warning()
     if news:
-        print(f"⚠️ News warning: {news}")
-        send_telegram(f"⚠️ AI Bot paused - {news}")
+        print(f"⚠️ News warning: {news} - Skipping (no Telegram)")
         return
 
     market_data = []
@@ -384,7 +383,7 @@ def run_analysis():
             print(f"⏭️ {symbol}: Already has open position - Skip")
             continue
 
-        if conf < 6:
+        if conf < 7:
             print(f"⏳ Confidence too low ({conf}/10) - Skip")
             continue
 
