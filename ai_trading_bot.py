@@ -104,7 +104,116 @@ def update_balance():
 
 @app.route("/", methods=["GET"])
 def home():
-    return jsonify({"bot": "AI Trading Bot", "status": "online", "balance": real_balance})
+    kuwait_tz = pytz.timezone(TIMEZONE)
+    now = datetime.now(kuwait_tz)
+
+    # بناء جدول الصفقات المفتوحة
+    positions_rows = ""
+    for sym, is_open in open_positions.items():
+        status_badge = '<span style="color:#00ff88">● مفتوحة</span>' if is_open else '<span style="color:#666">○ لا يوجد</span>'
+        signal = latest_signals.get(sym, {})
+        action = signal.get("action", "WAIT")
+        action_color = "#00ff88" if action == "BUY" else "#ff4444" if action == "SELL" else "#888"
+        positions_rows += f"""
+        <tr>
+            <td>{sym}</td>
+            <td>{status_badge}</td>
+            <td style="color:{action_color}">{action}</td>
+            <td>{signal.get("confidence", "-")}/10</td>
+            <td>{signal.get("entry", "-")}</td>
+            <td>{signal.get("sl", "-")}</td>
+            <td>{signal.get("tp1", "-")}</td>
+        </tr>"""
+
+    html = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Trading Bot Dashboard</title>
+<meta http-equiv="refresh" content="30">
+<style>
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{ background: #0a0a0f; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }}
+  .header {{ background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 20px 30px; border-bottom: 1px solid #2a2a4a; display: flex; justify-content: space-between; align-items: center; }}
+  .header h1 {{ font-size: 1.4em; color: #00ff88; }}
+  .header .time {{ color: #888; font-size: 0.85em; }}
+  .cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; padding: 20px 30px; }}
+  .card {{ background: #12122a; border: 1px solid #2a2a4a; border-radius: 12px; padding: 20px; }}
+  .card .label {{ color: #888; font-size: 0.8em; margin-bottom: 8px; }}
+  .card .value {{ font-size: 1.6em; font-weight: bold; color: #00ff88; }}
+  .card .value.red {{ color: #ff4444; }}
+  .card .value.white {{ color: #fff; }}
+  .section {{ padding: 0 30px 20px; }}
+  .section h2 {{ color: #888; font-size: 0.9em; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; }}
+  table {{ width: 100%; border-collapse: collapse; background: #12122a; border-radius: 12px; overflow: hidden; }}
+  th {{ background: #1a1a3a; color: #888; font-size: 0.8em; padding: 12px 15px; text-align: right; }}
+  td {{ padding: 12px 15px; border-top: 1px solid #1a1a2e; font-size: 0.9em; }}
+  tr:hover {{ background: #1a1a2e; }}
+  .status-dot {{ display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00ff88; margin-left: 8px; animation: pulse 2s infinite; }}
+  @keyframes pulse {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0.4; }} }}
+  .footer {{ text-align: center; color: #444; font-size: 0.75em; padding: 20px; }}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🤖 AI Trading Bot <span class="status-dot"></span></h1>
+  <div class="time">🕐 {now.strftime('%Y-%m-%d %H:%M')} Kuwait | يتحدث كل 30 ثانية</div>
+</div>
+
+<div class="cards">
+  <div class="card">
+    <div class="label">💰 الرصيد الحقيقي</div>
+    <div class="value">${real_balance:,.2f}</div>
+  </div>
+  <div class="card">
+    <div class="label">📊 P&L اليوم</div>
+    <div class="value {'red' if daily_pnl < 0 else ''}">{'+' if daily_pnl > 0 else ''}{daily_pnl:.2f}%</div>
+  </div>
+  <div class="card">
+    <div class="label">🔄 الأزواج</div>
+    <div class="value white">{len(SYMBOLS)}</div>
+  </div>
+  <div class="card">
+    <div class="label">📡 آخر Signal</div>
+    <div class="value white">ID #{signal_counter}</div>
+  </div>
+  <div class="card">
+    <div class="label">⏱️ الفترة</div>
+    <div class="value white">15 دقيقة</div>
+  </div>
+  <div class="card">
+    <div class="label">🛡️ حد الخسارة اليومية</div>
+    <div class="value white">{MAX_DAILY_LOSS}%</div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>📋 الأزواج والإشارات</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>الزوج</th>
+        <th>الصفقة</th>
+        <th>الإشارة</th>
+        <th>الثقة</th>
+        <th>الدخول</th>
+        <th>SL</th>
+        <th>TP1</th>
+      </tr>
+    </thead>
+    <tbody>{positions_rows}</tbody>
+  </table>
+</div>
+
+<div class="footer">
+  AI Trading Bot — Powered by Claude AI | worker-production-0bf8.up.railway.app
+</div>
+
+</body>
+</html>"""
+    return html
 
 def run_flask():
     app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
