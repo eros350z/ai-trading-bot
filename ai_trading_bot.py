@@ -29,7 +29,7 @@ RISK_PERCENT     = 1.0
 MAX_DAILY_LOSS   = 2.0
 MAX_DRAWDOWN     = 10.0
 
-SYMBOLS = ["XAUUSD", "BTCUSD", "USDJPY", "ETHUSD"]
+SYMBOLS = ["XAUUSD", "BTCUSD", "USDJPY", "ETHUSD", "USTEC", "USOIL"]
 
 daily_pnl     = 0.0
 start_balance = ACCOUNT_BALANCE
@@ -45,6 +45,8 @@ open_positions = {
     "BTCUSD": False,
     "USDJPY": False,
     "ETHUSD": False,
+    "USTEC":  False,
+    "USOIL":  False,
 }
 
 # ==========================================
@@ -55,6 +57,8 @@ latest_signals = {
     "BTCUSD": {"action": "WAIT", "id": 0},
     "USDJPY": {"action": "WAIT", "id": 0},
     "ETHUSD": {"action": "WAIT", "id": 0},
+    "USTEC":  {"action": "WAIT", "id": 0},
+    "USOIL":  {"action": "WAIT", "id": 0},
 }
 signal_counter = 0
 
@@ -227,6 +231,8 @@ def get_market_data(symbol):
             "XAUUSD": "GC=F",
             "BTCUSD": "BTC-USD",
             "USDJPY": "JPY=X",
+            "USTEC":  "NQ=F",
+            "USOIL":  "CL=F",
             "ETHUSD": "ETH-USD",
         }
         ticker = ticker_map.get(symbol, symbol)
@@ -341,7 +347,9 @@ Respond ONLY with a valid JSON array, no markdown, no explanation:
   {{"symbol": "XAUUSD", "action": "BUY or SELL or WAIT", "reason": "brief reason", "confidence": 1-10, "entry": price, "sl": price, "tp1": price, "tp2": price, "tp3": price}},
   {{"symbol": "BTCUSD", "action": "BUY or SELL or WAIT", "reason": "brief reason", "confidence": 1-10, "entry": price, "sl": price, "tp1": price, "tp2": price, "tp3": price}},
   {{"symbol": "USDJPY", "action": "BUY or SELL or WAIT", "reason": "brief reason", "confidence": 1-10, "entry": price, "sl": price, "tp1": price, "tp2": price, "tp3": price}},
-  {{"symbol": "ETHUSD", "action": "BUY or SELL or WAIT", "reason": "brief reason", "confidence": 1-10, "entry": price, "sl": price, "tp1": price, "tp2": price, "tp3": price}}
+  {{"symbol": "ETHUSD", "action": "BUY or SELL or WAIT", "reason": "brief reason", "confidence": 1-10, "entry": price, "sl": price, "tp1": price, "tp2": price, "tp3": price}},
+  {{"symbol": "USTEC", "action": "BUY or SELL or WAIT", "reason": "brief reason", "confidence": 1-10, "entry": price, "sl": price, "tp1": price, "tp2": price, "tp3": price}},
+  {{"symbol": "USOIL", "action": "BUY or SELL or WAIT", "reason": "brief reason", "confidence": 1-10, "entry": price, "sl": price, "tp1": price, "tp2": price, "tp3": price}}
 ]"""
 
         response = requests.post(
@@ -392,6 +400,12 @@ def calc_lot(balance, risk_pct, sl_points, symbol):
         min_lot = 0.01
     elif symbol == "USDJPY":
         lot = risk_amount / (sl_points * 10.0)
+        min_lot = 0.01
+    elif symbol == "USTEC":
+        lot = risk_amount / (sl_points * 1.0)
+        min_lot = 0.01
+    elif symbol == "USOIL":
+        lot = risk_amount / (sl_points * 1.0)
         min_lot = 0.01
     elif symbol == "ETHUSD":
         lot = risk_amount / (sl_points * 0.01)
@@ -457,7 +471,7 @@ def run_analysis():
         SYMBOLS = ["BTCUSD", "ETHUSD"]
         print("📅 Weekend - Gold stopped, BTC continues")
     else:
-        SYMBOLS = ["XAUUSD", "BTCUSD", "USDJPY", "ETHUSD"]
+        SYMBOLS = ["XAUUSD", "BTCUSD", "USDJPY", "ETHUSD", "USTEC", "USOIL"]
 
     if daily_pnl <= -MAX_DAILY_LOSS:
         print(f"🛑 Daily loss limit reached: {daily_pnl}%")
