@@ -38,6 +38,7 @@ last_day      = datetime.now().date()
 
 # رصيد حقيقي من MT5
 real_balance = ACCOUNT_BALANCE
+current_news = None  # الأخبار الحالية
 day_start_real = ACCOUNT_BALANCE  # رصيد بداية اليوم الحقيقي
 
 # الصفقات المفتوحة من MT5
@@ -132,6 +133,7 @@ def home():
             <td>{signal.get("tp1", "-")}</td>
         </tr>"""
 
+    news_banner = f'''<div style="background:#2a1a00;border:1px solid #ff8800;border-radius:8px;margin:15px 30px;padding:12px 20px;color:#ff8800;font-size:0.9em;">⚠️ التداول متوقف بسبب أخبار مهمة: {current_news}</div>''' if current_news else ""
     html = f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -169,6 +171,7 @@ def home():
   <div class="time">🕐 {now.strftime('%Y-%m-%d %H:%M')} Kuwait | يتحدث كل 30 ثانية</div>
 </div>
 
+{news_banner}
 <div class="cards">
   <div class="card">
     <div class="label">💰 الرصيد الحقيقي</div>
@@ -316,21 +319,79 @@ def calc_atr(highs, lows, closes, period=14):
         trs.append(tr)
     return sum(trs[-period:]) / period
 
+# تخزين الأخبار المجلوبة
+_news_cache = []
+_news_last_fetch = None
+
+def fetch_news_calendar():
+    """جلب التقويم الاقتصادي من Forex Factory"""
+    global _news_cache, _news_last_fetch
+    try:
+        kuwait_tz = pytz.timezone(TIMEZONE)
+        now = datetime.now(kuwait_tz)
+
+        # تحديث كل ساعة فقط
+        if _news_last_fetch and (now - _news_last_fetch).seconds < 3600:
+            return _news_cache
+
+        url = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+        r = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        if r.status_code == 200:
+            data = r.json()
+            _news_cache = data
+            _news_last_fetch = now
+            print(f"📰 News calendar updated: {len(data)} events")
+        return _news_cache
+    except Exception as e:
+        print(f"⚠️ News fetch error: {e}")
+        return _news_cache
+
 def get_news_warning():
     try:
         kuwait_tz = pytz.timezone(TIMEZONE)
         now = datetime.now(kuwait_tz)
-        hour = now.hour
-        high_impact_hours = {
-            16: "NFP / CPI / Fed Decision",
-            17: "US Economic Data",
-            15: "US Market Open",
-            21: "FOMC Minutes",
-        }
-        if hour in high_impact_hours:
-            return f"High Impact News Expected: {high_impact_hours[hour]}"
+
+        # جلب الأخبار
+        news_list = fetch_news_calendar()
+        if not news_list:
+            return None
+
+        # التحقق من الأخبار خلال 30 دقيقة القادمة
+        for event in news_list:
+            try:
+                impact = event.get("impact", "").lower()
+                if impact != "high":
+                    continue
+
+                currency = event.get("currency", "")
+                # نهتم فقط بأخبار USD و EUR و JPY
+                if currency not in ["USD", "EUR", "JPY", "GBP"]:
+                    continue
+
+                title = event.get("title", "")
+                date_str = event.get("date", "")
+                time_str = event.get("time", "")
+
+                if not date_str or not time_str or time_str == "All Day" or time_str == "Tentative":
+                    continue
+
+                # تحويل الوقت
+                event_dt_str = f"{date_str} {time_str}"
+                event_dt = datetime.strptime(event_dt_str, "%Y-%m-%d %I:%M%p")
+                event_dt = pytz.timezone("America/New_York").localize(event_dt)
+                event_kuwait = event_dt.astimezone(kuwait_tz)
+
+                # تحقق إذا الخبر خلال 30 دقيقة
+                diff = (event_kuwait - now).total_seconds() / 60
+                if -10 <= diff <= 30:
+                    return f"High Impact: {title} ({currency}) @ {event_kuwait.strftime('%H:%M')}"
+
+            except Exception:
+                continue
+
         return None
-    except:
+    except Exception as e:
+        print(f"⚠️ News check error: {e}")
         return None
 
 def ask_gemini(market_data_list):
@@ -455,7 +516,7 @@ def update_signal(decision, lot):
 # الدورة الرئيسية
 # ==========================================
 def run_analysis():
-    global daily_pnl, day_start_bal, last_day, real_balance, open_positions, day_start_real
+    global daily_pnl, day_start_bal, last_day, real_balance, open_positions, day_start_real, current_news
 
     kuwait_tz = pytz.timezone(TIMEZONE)
     now = datetime.now(kuwait_tz)
@@ -482,10 +543,14 @@ def run_analysis():
         send_telegram(f"🛑 AI Bot: Daily loss limit {MAX_DAILY_LOSS}% reached. Stopped for today.")
         return
 
+    global current_news
     news = get_news_warning()
     if news:
+        current_news = news
         print(f"⚠️ News warning: {news} - Skipping (no Telegram)")
         return
+    else:
+        current_news = None
 
     market_data = []
     for symbol in SYMBOLS:
