@@ -318,7 +318,7 @@ def update_signal(decision, lot):
 # الدورة الرئيسية
 # ==========================================
 def run_analysis():
-    global daily_pnl, day_start_bal, last_day, real_balance
+    global daily_pnl, day_start_bal, last_day, real_balance, open_positions
 
     kuwait_tz = pytz.timezone(TIMEZONE)
     now = datetime.now(kuwait_tz)
