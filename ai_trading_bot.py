@@ -38,6 +38,7 @@ last_day      = datetime.now().date()
 
 # رصيد حقيقي من MT5
 real_balance = ACCOUNT_BALANCE
+day_start_real = ACCOUNT_BALANCE  # رصيد بداية اليوم الحقيقي
 
 # الصفقات المفتوحة من MT5
 open_positions = {
@@ -98,12 +99,14 @@ def update_positions():
 
 @app.route("/balance", methods=["POST"])
 def update_balance():
-    global real_balance
+    global real_balance, daily_pnl, day_start_real
     from flask import request
     data = request.get_json()
     if data and "balance" in data:
         real_balance = float(data["balance"])
-        print(f"💰 Balance updated from MT5: ${real_balance}")
+        if day_start_real > 0:
+            daily_pnl = round(((real_balance - day_start_real) / day_start_real) * 100, 2)
+        print(f"💰 Balance updated from MT5: ${real_balance} | P&L: {daily_pnl}%")
     return jsonify({"status": "ok"})
 
 @app.route("/", methods=["GET"])
@@ -452,7 +455,7 @@ def update_signal(decision, lot):
 # الدورة الرئيسية
 # ==========================================
 def run_analysis():
-    global daily_pnl, day_start_bal, last_day, real_balance, open_positions
+    global daily_pnl, day_start_bal, last_day, real_balance, open_positions, day_start_real
 
     kuwait_tz = pytz.timezone(TIMEZONE)
     now = datetime.now(kuwait_tz)
@@ -463,12 +466,13 @@ def run_analysis():
     if now.date() != last_day:
         daily_pnl = 0.0
         day_start_bal = ACCOUNT_BALANCE
+        day_start_real = real_balance
         last_day = now.date()
         print("📅 New day reset")
 
     if now.weekday() >= 5:
         global SYMBOLS
-        SYMBOLS = ["BTCUSD", "ETHUSD"]
+        SYMBOLS = ["BTCUSD", "ETHUSD", "USTEC", "USOIL"]
         print("📅 Weekend - Gold stopped, BTC continues")
     else:
         SYMBOLS = ["XAUUSD", "BTCUSD", "USDJPY", "ETHUSD", "USTEC", "USOIL"]
