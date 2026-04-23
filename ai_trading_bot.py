@@ -71,6 +71,16 @@ def status():
         "signals": latest_signals
     })
 
+@app.route("/positions", methods=["POST"])
+def update_positions():
+    global open_positions
+    from flask import request
+    data = request.get_json()
+    if data and "positions" in data:
+        open_positions = data["positions"]
+        print(f"📊 Positions updated: {open_positions}")
+    return jsonify({"status": "ok"})
+
 @app.route("/balance", methods=["POST"])
 def update_balance():
     global real_balance
@@ -367,6 +377,11 @@ def run_analysis():
         print(f"\n📋 {symbol}: {action} | Confidence: {conf}/10 | {reason}")
 
         if action == "WAIT":
+            continue
+
+        # تحقق إذا في صفقة مفتوحة على نفس الزوج
+        if open_positions.get(symbol, False):
+            print(f"⏭️ {symbol}: Already has open position - Skip")
             continue
 
         if conf < 6:
