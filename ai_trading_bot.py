@@ -147,7 +147,12 @@ td{{padding:10px 14px;border-top:1px solid #1a1a2e;font-size:0.88em}}
 <body>
 <div class="header">
   <h1>🤖 AI Trading Bot v2 <span class="dot"></span></h1>
-  <div class="time">🕐 {now.strftime('%Y-%m-%d %H:%M')} Kuwait &nbsp;|&nbsp; <span class="badge">H1 + M15 + M5</span></div>
+  <div style="display:flex;align-items:center;gap:15px">
+    <span style="background:{'#1a2a1a' if bot_enabled else '#2a1a1a'};border:1px solid {'#00ff88' if bot_enabled else '#ff4444'};color:{'#00ff88' if bot_enabled else '#ff4444'};padding:4px 12px;border-radius:6px;font-size:0.85em">
+      {'🟢 شغال' if bot_enabled else '🔴 متوقف'}
+    </span>
+    <div class="time">🕐 {now.strftime('%Y-%m-%d %H:%M')} Kuwait &nbsp;|&nbsp; <span class="badge">H1 + M15 + M5</span></div>
+  </div>
 </div>
 {news_banner}
 <div class="cards">
