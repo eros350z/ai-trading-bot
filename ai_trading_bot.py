@@ -531,9 +531,32 @@ def run_analysis():
             continue
 
         # حساب الـ Lot
-        entry = decision.get("entry", 0)
-        sl    = decision.get("sl", 0)
-        sl_dist = abs(entry - sl)
+        entry  = decision.get("entry", 0)
+        sl     = decision.get("sl", 0)
+
+        # الحد الأدنى للـ SL = ATR × 1.5 على M5
+        market = next((d for d in market_data if d["symbol"] == symbol), None)
+        if market:
+            min_sl_dist = market["m5_atr"] * 1.5
+            sl_dist = abs(entry - sl)
+            if sl_dist < min_sl_dist:
+                sl_dist = min_sl_dist
+                if action == "BUY":
+                    sl = round(entry - sl_dist, 5)
+                else:
+                    sl = round(entry + sl_dist, 5)
+                # تحديث الـ TP
+                tp1 = round(entry + sl_dist * 1.5, 5) if action == "BUY" else round(entry - sl_dist * 1.5, 5)
+                tp2 = round(entry + sl_dist * 2.5, 5) if action == "BUY" else round(entry - sl_dist * 2.5, 5)
+                tp3 = round(entry + sl_dist * 4.0, 5) if action == "BUY" else round(entry - sl_dist * 4.0, 5)
+                decision["sl"]  = sl
+                decision["tp1"] = tp1
+                decision["tp2"] = tp2
+                decision["tp3"] = tp3
+                print(f"📐 SL adjusted to ATR×1.5 | SL dist: {sl_dist:.5f}")
+        else:
+            sl_dist = abs(entry - sl)
+
         lot = calc_lot(real_balance, RISK_PERCENT, sl_dist, symbol)
 
         # تحديث الـ Signal
