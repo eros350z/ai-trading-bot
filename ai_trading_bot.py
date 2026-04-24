@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-AI Trading Bot - Claude Powered
-يحلل الذهب والبيتكوين كل 15 دقيقة ويتداول تلقائياً
+AI Trading Bot v2 - Multi-Timeframe Analysis
+H1 Trend + M15 Confirmation + M5 Entry
 """
 
 import os
@@ -11,412 +11,329 @@ import time
 import json
 import threading
 from datetime import datetime
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 import pytz
 
 # ==========================================
 # الإعدادات
 # ==========================================
-BOT_TOKEN    = "8764834987:AAHZ_dC1TmEfTO-Pbmd1AyZQcuHsNFQZy64"
-CHAT_ID      = "6652508619"
-CLAUDE_API   = "https://api.anthropic.com/v1/messages"
-CLAUDE_KEY   = os.environ.get("CLAUDE_KEY", "")
-print(f"🔑 CLAUDE_KEY length: {len(CLAUDE_KEY)} chars")
-TIMEZONE     = "Asia/Kuwait"
+BOT_TOKEN   = "8764834987:AAHZ_dC1TmEfTO-Pbmd1AyZQcuHsNFQZy64"
+CHAT_ID     = "6652508619"
+CLAUDE_API  = "https://api.anthropic.com/v1/messages"
+CLAUDE_KEY  = os.environ.get("CLAUDE_KEY", "")
+TIMEZONE    = "Asia/Kuwait"
 
-ACCOUNT_BALANCE  = 2000.0
-RISK_PERCENT     = 1.0
-MAX_DAILY_LOSS   = 2.0
-MAX_DRAWDOWN     = 10.0
-
-SYMBOLS = ["XAUUSD", "BTCUSD", "USDJPY", "ETHUSD", "USTEC", "USOIL"]
-
-daily_pnl     = 0.0
-start_balance = ACCOUNT_BALANCE
-day_start_bal = ACCOUNT_BALANCE
-last_day      = datetime.now().date()
-
-# رصيد حقيقي من MT5
-real_balance = ACCOUNT_BALANCE
-current_news = None  # الأخبار الحالية
-day_start_real = ACCOUNT_BALANCE  # رصيد بداية اليوم الحقيقي
-
-# الصفقات المفتوحة من MT5
-open_positions = {
-    "XAUUSD": False,
-    "BTCUSD": False,
-    "USDJPY": False,
-    "ETHUSD": False,
-    "USTEC":  False,
-    "USOIL":  False,
-}
+RISK_PERCENT   = 1.0
+MAX_DAILY_LOSS = 2.0
+SYMBOLS = ["XAUUSD", "BTCUSD", "ETHUSD", "USDJPY", "USTEC", "USOIL"]
 
 # ==========================================
-# تخزين آخر Signal لكل رمز
+# متغيرات
 # ==========================================
-latest_signals = {
-    "XAUUSD": {"action": "WAIT", "id": 0},
-    "BTCUSD": {"action": "WAIT", "id": 0},
-    "USDJPY": {"action": "WAIT", "id": 0},
-    "ETHUSD": {"action": "WAIT", "id": 0},
-    "USTEC":  {"action": "WAIT", "id": 0},
-    "USOIL":  {"action": "WAIT", "id": 0},
-}
+real_balance   = 2000.0
+day_start_real = 2000.0
+daily_pnl      = 0.0
+last_day       = datetime.now().date()
 signal_counter = 0
+current_news   = None
+
+open_positions = {s: False for s in SYMBOLS}
+latest_signals = {s: {"action": "WAIT", "id": 0} for s in SYMBOLS}
+
+# تخزين الأخبار
+_news_cache     = []
+_news_last_fetch = None
 
 # ==========================================
-# Flask Server
+# Flask
 # ==========================================
 app = Flask(__name__)
 
-@app.route("/signal/<symbol>", methods=["GET"])
+@app.route("/signal/<symbol>")
 def get_signal(symbol):
-    symbol = symbol.upper()
-    if symbol in latest_signals:
-        return jsonify(latest_signals[symbol])
-    return jsonify({"action": "WAIT", "id": 0})
-
-@app.route("/status", methods=["GET"])
-def status():
-    kuwait_tz = pytz.timezone(TIMEZONE)
-    now = datetime.now(kuwait_tz)
-    return jsonify({
-        "status": "running",
-        "time": now.strftime("%Y-%m-%d %H:%M"),
-        "balance": ACCOUNT_BALANCE,
-        "daily_pnl": round(daily_pnl, 2),
-        "signals": latest_signals
-    })
+    return jsonify(latest_signals.get(symbol.upper(), {"action": "WAIT", "id": 0}))
 
 @app.route("/positions", methods=["POST"])
 def update_positions():
     global open_positions
-    from flask import request
     data = request.get_json()
     if data and "positions" in data:
         open_positions = data["positions"]
-        print(f"📊 Positions updated: {open_positions}")
     return jsonify({"status": "ok"})
 
 @app.route("/balance", methods=["POST"])
 def update_balance():
     global real_balance, daily_pnl, day_start_real
-    from flask import request
     data = request.get_json()
     if data and "balance" in data:
         real_balance = float(data["balance"])
-        # أول مرة يوصل رصيد حقيقي → يصير هو day_start_real
-        if day_start_real == ACCOUNT_BALANCE and real_balance != ACCOUNT_BALANCE:
+        if day_start_real == 2000.0 and real_balance != 2000.0:
             day_start_real = real_balance
         if day_start_real > 0:
             daily_pnl = round(((real_balance - day_start_real) / day_start_real) * 100, 2)
-        print(f"💰 Balance updated from MT5: ${real_balance} | P&L: {daily_pnl}%")
+        print(f"💰 Balance: ${real_balance} | P&L: {daily_pnl}%")
     return jsonify({"status": "ok"})
 
-@app.route("/", methods=["GET"])
-def home():
+@app.route("/")
+def dashboard():
     kuwait_tz = pytz.timezone(TIMEZONE)
     now = datetime.now(kuwait_tz)
 
-    # بناء جدول الصفقات المفتوحة
-    positions_rows = ""
-    for sym, is_open in open_positions.items():
-        status_badge = '<span style="color:#00ff88">● مفتوحة</span>' if is_open else '<span style="color:#666">○ لا يوجد</span>'
-        signal = latest_signals.get(sym, {})
-        action = signal.get("action", "WAIT")
+    news_banner = f'''<div style="background:#2a1a00;border:1px solid #ff8800;border-radius:8px;margin:15px 30px;padding:12px 20px;color:#ff8800;">
+    ⚠️ التداول متوقف: {current_news}</div>''' if current_news else ""
+
+    rows = ""
+    for sym in SYMBOLS:
+        is_open = open_positions.get(sym, False)
+        sig = latest_signals.get(sym, {})
+        action = sig.get("action", "WAIT")
         action_color = "#00ff88" if action == "BUY" else "#ff4444" if action == "SELL" else "#888"
-        positions_rows += f"""
-        <tr>
-            <td>{sym}</td>
-            <td>{status_badge}</td>
+        status = '<span style="color:#00ff88">● مفتوحة</span>' if is_open else '<span style="color:#555">○ لا يوجد</span>'
+        rows += f"""<tr>
+            <td>{sym}</td><td>{status}</td>
             <td style="color:{action_color}">{action}</td>
-            <td>{signal.get("confidence", "-")}/10</td>
-            <td>{signal.get("entry", "-")}</td>
-            <td>{signal.get("sl", "-")}</td>
-            <td>{signal.get("tp1", "-")}</td>
+            <td>{sig.get("confidence","-")}/10</td>
+            <td>{sig.get("entry","-")}</td>
+            <td>{sig.get("sl","-")}</td>
+            <td>{sig.get("tp1","-")}</td>
         </tr>"""
 
-    news_banner = f'''<div style="background:#2a1a00;border:1px solid #ff8800;border-radius:8px;margin:15px 30px;padding:12px 20px;color:#ff8800;font-size:0.9em;">⚠️ التداول متوقف بسبب أخبار مهمة: {current_news}</div>''' if current_news else ""
-    html = f"""<!DOCTYPE html>
+    pnl_color = "#ff4444" if daily_pnl < 0 else "#00ff88"
+
+    return f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Trading Bot Dashboard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="refresh" content="30">
+<title>AI Trading Bot v2</title>
 <style>
-  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-  body {{ background: #0a0a0f; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }}
-  .header {{ background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 20px 30px; border-bottom: 1px solid #2a2a4a; display: flex; justify-content: space-between; align-items: center; }}
-  .header h1 {{ font-size: 1.4em; color: #00ff88; }}
-  .header .time {{ color: #888; font-size: 0.85em; }}
-  .cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; padding: 20px 30px; }}
-  .card {{ background: #12122a; border: 1px solid #2a2a4a; border-radius: 12px; padding: 20px; }}
-  .card .label {{ color: #888; font-size: 0.8em; margin-bottom: 8px; }}
-  .card .value {{ font-size: 1.6em; font-weight: bold; color: #00ff88; }}
-  .card .value.red {{ color: #ff4444; }}
-  .card .value.white {{ color: #fff; }}
-  .section {{ padding: 0 30px 20px; }}
-  .section h2 {{ color: #888; font-size: 0.9em; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; }}
-  table {{ width: 100%; border-collapse: collapse; background: #12122a; border-radius: 12px; overflow: hidden; }}
-  th {{ background: #1a1a3a; color: #888; font-size: 0.8em; padding: 12px 15px; text-align: right; }}
-  td {{ padding: 12px 15px; border-top: 1px solid #1a1a2e; font-size: 0.9em; }}
-  tr:hover {{ background: #1a1a2e; }}
-  .status-dot {{ display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00ff88; margin-left: 8px; animation: pulse 2s infinite; }}
-  @keyframes pulse {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0.4; }} }}
-  .footer {{ text-align: center; color: #444; font-size: 0.75em; padding: 20px; }}
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{background:#0a0a0f;color:#e0e0e0;font-family:'Segoe UI',sans-serif}}
+.header{{background:linear-gradient(135deg,#1a1a2e,#16213e);padding:18px 30px;border-bottom:1px solid #2a2a4a;display:flex;justify-content:space-between;align-items:center}}
+.header h1{{color:#00ff88;font-size:1.3em}}
+.time{{color:#888;font-size:0.82em}}
+.cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;padding:18px 30px}}
+.card{{background:#12122a;border:1px solid #2a2a4a;border-radius:10px;padding:18px}}
+.card .label{{color:#888;font-size:0.78em;margin-bottom:6px}}
+.card .value{{font-size:1.5em;font-weight:bold;color:#00ff88}}
+.section{{padding:0 30px 20px}}
+.section h2{{color:#666;font-size:0.85em;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px}}
+table{{width:100%;border-collapse:collapse;background:#12122a;border-radius:10px;overflow:hidden}}
+th{{background:#1a1a3a;color:#888;font-size:0.78em;padding:10px 14px;text-align:right}}
+td{{padding:10px 14px;border-top:1px solid #1a1a2e;font-size:0.88em}}
+.dot{{display:inline-block;width:7px;height:7px;border-radius:50%;background:#00ff88;margin-left:7px;animation:pulse 2s infinite}}
+@keyframes pulse{{0%,100%{{opacity:1}}50%{{opacity:0.3}}}}
+.footer{{text-align:center;color:#333;font-size:0.72em;padding:16px}}
+.badge{{background:#1a2a1a;border:1px solid #00ff88;color:#00ff88;padding:2px 8px;border-radius:4px;font-size:0.75em}}
 </style>
 </head>
 <body>
-
 <div class="header">
-  <h1>🤖 AI Trading Bot <span class="status-dot"></span></h1>
-  <div class="time">🕐 {now.strftime('%Y-%m-%d %H:%M')} Kuwait | يتحدث كل 30 ثانية</div>
+  <h1>🤖 AI Trading Bot v2 <span class="dot"></span></h1>
+  <div class="time">🕐 {now.strftime('%Y-%m-%d %H:%M')} Kuwait &nbsp;|&nbsp; <span class="badge">H1 + M15 + M5</span></div>
 </div>
-
 {news_banner}
 <div class="cards">
-  <div class="card">
-    <div class="label">💰 الرصيد الحقيقي</div>
-    <div class="value">${real_balance:,.2f}</div>
-  </div>
-  <div class="card">
-    <div class="label">📊 P&L اليوم</div>
-    <div class="value {'red' if daily_pnl < 0 else ''}">{'+' if daily_pnl > 0 else ''}{daily_pnl:.2f}%</div>
-  </div>
-  <div class="card">
-    <div class="label">🔄 الأزواج</div>
-    <div class="value white">{len(SYMBOLS)}</div>
-  </div>
-  <div class="card">
-    <div class="label">📡 آخر Signal</div>
-    <div class="value white">ID #{signal_counter}</div>
-  </div>
-  <div class="card">
-    <div class="label">⏱️ الفترة</div>
-    <div class="value white">15 دقيقة</div>
-  </div>
-  <div class="card">
-    <div class="label">🛡️ حد الخسارة اليومية</div>
-    <div class="value white">{MAX_DAILY_LOSS}%</div>
-  </div>
+  <div class="card"><div class="label">💰 الرصيد</div><div class="value">${real_balance:,.2f}</div></div>
+  <div class="card"><div class="label">📊 P&L اليوم</div><div class="value" style="color:{pnl_color}">{'+' if daily_pnl>0 else ''}{daily_pnl:.2f}%</div></div>
+  <div class="card"><div class="label">📡 آخر Signal</div><div class="value" style="color:#fff">ID #{signal_counter}</div></div>
+  <div class="card"><div class="label">🔄 الأزواج</div><div class="value" style="color:#fff">{len(SYMBOLS)}</div></div>
+  <div class="card"><div class="label">⏱️ الفريم</div><div class="value" style="color:#fff;font-size:1em">H1+M15+M5</div></div>
+  <div class="card"><div class="label">🛡️ حد الخسارة</div><div class="value" style="color:#fff">{MAX_DAILY_LOSS}%</div></div>
 </div>
-
 <div class="section">
   <h2>📋 الأزواج والإشارات</h2>
   <table>
-    <thead>
-      <tr>
-        <th>الزوج</th>
-        <th>الصفقة</th>
-        <th>الإشارة</th>
-        <th>الثقة</th>
-        <th>الدخول</th>
-        <th>SL</th>
-        <th>TP1</th>
-      </tr>
-    </thead>
-    <tbody>{positions_rows}</tbody>
+    <thead><tr><th>الزوج</th><th>الصفقة</th><th>الإشارة</th><th>الثقة</th><th>الدخول</th><th>SL</th><th>TP1</th></tr></thead>
+    <tbody>{rows}</tbody>
   </table>
 </div>
-
-<div class="footer">
-  AI Trading Bot — Powered by Claude AI | worker-production-0bf8.up.railway.app
-</div>
-
-</body>
-</html>"""
-    return html
+<div class="footer">AI Trading Bot v2 — Multi-Timeframe | Powered by Claude AI</div>
+</body></html>"""
 
 def run_flask():
     app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
 
 # ==========================================
-# جلب السعر
+# جلب البيانات - Multi-Timeframe
 # ==========================================
 def get_market_data(symbol):
     try:
         ticker_map = {
             "XAUUSD": "GC=F",
             "BTCUSD": "BTC-USD",
+            "ETHUSD": "ETH-USD",
             "USDJPY": "JPY=X",
             "USTEC":  "NQ=F",
             "USOIL":  "CL=F",
-            "ETHUSD": "ETH-USD",
         }
         ticker = ticker_map.get(symbol, symbol)
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=30m&range=2d"
         headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, headers=headers, timeout=10)
-        data = r.json()
 
-        result = data["chart"]["result"][0]
-        meta   = result["meta"]
-        closes = result["indicators"]["quote"][0]["close"]
-        highs  = result["indicators"]["quote"][0]["high"]
-        lows   = result["indicators"]["quote"][0]["low"]
+        def fetch(interval, period):
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval={interval}&range={period}"
+            r = requests.get(url, headers=headers, timeout=10)
+            data = r.json()
+            result = data["chart"]["result"][0]
+            closes = [x for x in result["indicators"]["quote"][0]["close"] if x]
+            highs  = [x for x in result["indicators"]["quote"][0]["high"]  if x]
+            lows   = [x for x in result["indicators"]["quote"][0]["low"]   if x]
+            return closes, highs, lows
 
-        closes = [x for x in closes if x is not None]
-        highs  = [x for x in highs  if x is not None]
-        lows   = [x for x in lows   if x is not None]
+        # H1 - الاتجاه العام
+        h1_closes, h1_highs, h1_lows = fetch("1h", "5d")
+        # M15 - التأكيد
+        m15_closes, m15_highs, m15_lows = fetch("15m", "5d")
+        # M5 - الدخول
+        m5_closes, m5_highs, m5_lows = fetch("5m", "1d")
 
-        if len(closes) < 10:
+        if len(h1_closes) < 21 or len(m15_closes) < 21 or len(m5_closes) < 10:
             return None
 
-        price = meta["regularMarketPrice"]
-        prev  = meta["chartPreviousClose"]
-        change = price - prev
-        pct   = (change / prev) * 100
+        price = m5_closes[-1]
 
-        ema8  = calc_ema(closes, 8)
-        ema21 = calc_ema(closes, 21)
-        rsi   = calc_rsi(closes, 14)
-        atr   = calc_atr(highs, lows, closes, 14)
-        last5 = [round(c, 2) for c in closes[-5:]]
+        def ema(data, p):
+            if len(data) < p: return data[-1]
+            k = 2/(p+1); e = data[0]
+            for x in data[1:]: e = x*k + e*(1-k)
+            return round(e, 5)
+
+        def rsi(data, p=14):
+            if len(data) < p+1: return 50
+            g = [max(data[i]-data[i-1],0) for i in range(1,len(data))]
+            l = [max(data[i-1]-data[i],0) for i in range(1,len(data))]
+            ag = sum(g[-p:])/p; al = sum(l[-p:])/p
+            return round(100-(100/(1+ag/al)) if al else 100, 1)
+
+        def atr(h, l, c, p=14):
+            if len(h) < p+1: return h[-1]-l[-1]
+            trs = [max(h[i]-l[i], abs(h[i]-c[i-1]), abs(l[i]-c[i-1])) for i in range(1,len(h))]
+            return round(sum(trs[-p:])/p, 5)
+
+        def swing_low(lows, n=10):
+            return round(min(lows[-n:]), 5)
+
+        def swing_high(highs, n=10):
+            return round(max(highs[-n:]), 5)
 
         return {
-            "symbol": symbol, "price": round(price, 2),
-            "change": round(change, 2), "pct": round(pct, 2),
-            "ema8": round(ema8, 2), "ema21": round(ema21, 2),
-            "rsi": round(rsi, 1), "atr": round(atr, 2),
-            "high24": round(max(highs[-48:]), 2) if len(highs) >= 48 else round(max(highs), 2),
-            "low24":  round(min(lows[-48:]),  2) if len(lows)  >= 48 else round(min(lows),  2),
-            "last5": last5,
+            "symbol": symbol,
+            "price":  round(price, 5),
+            # H1
+            "h1_ema21": ema(h1_closes, 21),
+            "h1_ema50": ema(h1_closes, 50),
+            "h1_rsi":   rsi(h1_closes),
+            "h1_atr":   atr(h1_highs, h1_lows, h1_closes),
+            "h1_trend": "UP" if ema(h1_closes, 21) > ema(h1_closes, 50) else "DOWN",
+            # M15
+            "m15_ema9":  ema(m15_closes, 9),
+            "m15_ema21": ema(m15_closes, 21),
+            "m15_rsi":   rsi(m15_closes),
+            "m15_atr":   atr(m15_highs, m15_lows, m15_closes),
+            "m15_trend": "UP" if ema(m15_closes, 9) > ema(m15_closes, 21) else "DOWN",
+            # M5
+            "m5_ema9":   ema(m5_closes, 9),
+            "m5_ema21":  ema(m5_closes, 21),
+            "m5_rsi":    rsi(m5_closes),
+            "m5_atr":    atr(m5_highs, m5_lows, m5_closes),
+            "m5_last5":  [round(x, 5) for x in m5_closes[-5:]],
+            # Swing Points للـ SL
+            "swing_low":  swing_low(m5_lows),
+            "swing_high": swing_high(m5_highs),
         }
     except Exception as e:
-        print(f"❌ Error getting {symbol} data: {e}")
+        print(f"❌ Data error {symbol}: {e}")
         return None
 
-def calc_ema(data, period):
-    if len(data) < period:
-        return data[-1]
-    k = 2 / (period + 1)
-    ema = data[0]
-    for price in data[1:]:
-        ema = price * k + ema * (1 - k)
-    return ema
-
-def calc_rsi(data, period=14):
-    if len(data) < period + 1:
-        return 50
-    gains, losses = [], []
-    for i in range(1, len(data)):
-        diff = data[i] - data[i-1]
-        gains.append(max(diff, 0))
-        losses.append(max(-diff, 0))
-    avg_gain = sum(gains[-period:]) / period
-    avg_loss = sum(losses[-period:]) / period
-    if avg_loss == 0:
-        return 100
-    rs = avg_gain / avg_loss
-    return round(100 - (100 / (1 + rs)), 1)
-
-def calc_atr(highs, lows, closes, period=14):
-    if len(highs) < period + 1:
-        return highs[-1] - lows[-1]
-    trs = []
-    for i in range(1, len(highs)):
-        tr = max(highs[i] - lows[i],
-                 abs(highs[i] - closes[i-1]),
-                 abs(lows[i]  - closes[i-1]))
-        trs.append(tr)
-    return sum(trs[-period:]) / period
-
-# تخزين الأخبار المجلوبة
-_news_cache = []
-_news_last_fetch = None
-
-def fetch_news_calendar():
-    """جلب التقويم الاقتصادي من Forex Factory"""
+# ==========================================
+# الأخبار الحقيقية
+# ==========================================
+def fetch_news():
     global _news_cache, _news_last_fetch
     try:
         kuwait_tz = pytz.timezone(TIMEZONE)
         now = datetime.now(kuwait_tz)
-
-        # تحديث كل ساعة فقط
         if _news_last_fetch and (now - _news_last_fetch).seconds < 3600:
             return _news_cache
-
         url = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
         r = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
         if r.status_code == 200:
-            data = r.json()
-            _news_cache = data
+            _news_cache = r.json()
             _news_last_fetch = now
-            print(f"📰 News calendar updated: {len(data)} events")
+            print(f"📰 News updated: {len(_news_cache)} events")
         return _news_cache
-    except Exception as e:
-        print(f"⚠️ News fetch error: {e}")
+    except:
         return _news_cache
 
 def get_news_warning():
     try:
         kuwait_tz = pytz.timezone(TIMEZONE)
         now = datetime.now(kuwait_tz)
-
-        # جلب الأخبار
-        news_list = fetch_news_calendar()
-        if not news_list:
-            return None
-
-        # التحقق من الأخبار خلال 30 دقيقة القادمة
-        for event in news_list:
+        for event in fetch_news():
+            if event.get("impact","").lower() != "high": continue
+            if event.get("currency","") not in ["USD","EUR","JPY","GBP"]: continue
+            time_str = event.get("time","")
+            if not time_str or time_str in ["All Day","Tentative"]: continue
             try:
-                impact = event.get("impact", "").lower()
-                if impact != "high":
-                    continue
-
-                currency = event.get("currency", "")
-                # نهتم فقط بأخبار USD و EUR و JPY
-                if currency not in ["USD", "EUR", "JPY", "GBP"]:
-                    continue
-
-                title = event.get("title", "")
-                date_str = event.get("date", "")
-                time_str = event.get("time", "")
-
-                if not date_str or not time_str or time_str == "All Day" or time_str == "Tentative":
-                    continue
-
-                # تحويل الوقت
-                event_dt_str = f"{date_str} {time_str}"
-                event_dt = datetime.strptime(event_dt_str, "%Y-%m-%d %I:%M%p")
-                event_dt = pytz.timezone("America/New_York").localize(event_dt)
-                event_kuwait = event_dt.astimezone(kuwait_tz)
-
-                # تحقق إذا الخبر خلال 30 دقيقة
-                diff = (event_kuwait - now).total_seconds() / 60
+                dt = datetime.strptime(f"{event['date']} {time_str}", "%Y-%m-%d %I:%M%p")
+                dt = pytz.timezone("America/New_York").localize(dt).astimezone(kuwait_tz)
+                diff = (dt - now).total_seconds() / 60
                 if -10 <= diff <= 30:
-                    return f"High Impact: {title} ({currency}) @ {event_kuwait.strftime('%H:%M')}"
-
-            except Exception:
-                continue
-
+                    return f"{event.get('title','')} ({event.get('currency','')}) @ {dt.strftime('%H:%M')}"
+            except: continue
         return None
-    except Exception as e:
-        print(f"⚠️ News check error: {e}")
+    except:
         return None
 
-def ask_gemini(market_data_list):
+# ==========================================
+# Claude AI - تحليل Multi-Timeframe
+# ==========================================
+def ask_claude(market_data_list):
     try:
-        context = "You are an expert forex and crypto trader. Analyze the following market data and make a trading decision.\n\n"
-        for data in market_data_list:
-            if data is None:
-                continue
-            context += f"{data['symbol']}|{data['price']}|RSI:{data['rsi']}|EMA8:{data['ema8']}|EMA21:{data['ema21']}|ATR:{data['atr']}|H:{data['high24']}|L:{data['low24']}\n"
-        context += f"""
-Balance:${ACCOUNT_BALANCE} Risk:{RISK_PERCENT}% DailyPnL:{round(daily_pnl,2)}%
-Rules: EMA8>EMA21=uptrend, RSI buy:40-65 sell:35-60, avoid RSI>75 or <25
-SL=1.5xATR, TP1=2xATR, TP2=3xATR, TP3=5xATR
+        context = """You are a professional forex and crypto trader specializing in multi-timeframe analysis.
 
-Respond ONLY with a valid JSON array, no markdown, no explanation:
+Analyze the following market data across 3 timeframes (H1, M15, M5) and make precise trading decisions.
+
+ANALYSIS FRAMEWORK:
+1. H1 = Overall trend direction (must align with trade direction)
+2. M15 = Trend confirmation (must confirm H1 direction)  
+3. M5 = Precise entry signal (pullback to EMA or breakout)
+
+ENTRY RULES:
+- BUY only when: H1 trend=UP AND M15 trend=UP AND M5 shows bullish signal (price above M5 EMA9, RSI 40-65)
+- SELL only when: H1 trend=DOWN AND M15 trend=DOWN AND M5 shows bearish signal (price below M5 EMA9, RSI 35-60)
+- WAIT if timeframes conflict or RSI is extreme (>75 or <25)
+
+RISK RULES:
+- SL = swing_low for BUY, swing_high for SELL (already calculated)
+- TP1 = 1.5x SL distance, TP2 = 2.5x, TP3 = 4x
+- Minimum confidence 7/10 to trade
+
+MARKET DATA:
+"""
+        for d in market_data_list:
+            if not d: continue
+            context += f"""
+{d['symbol']} | Price: {d['price']}
+H1:  Trend={d['h1_trend']} | EMA21={d['h1_ema21']} | EMA50={d['h1_ema50']} | RSI={d['h1_rsi']} | ATR={d['h1_atr']}
+M15: Trend={d['m15_trend']} | EMA9={d['m15_ema9']} | EMA21={d['m15_ema21']} | RSI={d['m15_rsi']} | ATR={d['m15_atr']}
+M5:  EMA9={d['m5_ema9']} | EMA21={d['m5_ema21']} | RSI={d['m5_rsi']} | ATR={d['m5_atr']} | Last5={d['m5_last5']}
+SL_BUY={d['swing_low']} | SL_SELL={d['swing_high']}
+---"""
+
+        symbols_json = ",\n  ".join([
+            f'{{"symbol":"{d["symbol"]}","action":"BUY or SELL or WAIT","reason":"brief reason","confidence":1-10,"entry":{d["price"]},"sl":price,"tp1":price,"tp2":price,"tp3":price}}'
+            for d in market_data_list if d
+        ])
+
+        context += f"""
+Account Balance: ${real_balance}
+Risk per trade: {RISK_PERCENT}%
+
+Respond ONLY with valid JSON array, no markdown:
 [
-  {{"symbol": "XAUUSD", "action": "BUY or SELL or WAIT", "reason": "brief reason", "confidence": 1-10, "entry": price, "sl": price, "tp1": price, "tp2": price, "tp3": price}},
-  {{"symbol": "BTCUSD", "action": "BUY or SELL or WAIT", "reason": "brief reason", "confidence": 1-10, "entry": price, "sl": price, "tp1": price, "tp2": price, "tp3": price}},
-  {{"symbol": "USDJPY", "action": "BUY or SELL or WAIT", "reason": "brief reason", "confidence": 1-10, "entry": price, "sl": price, "tp1": price, "tp2": price, "tp3": price}},
-  {{"symbol": "ETHUSD", "action": "BUY or SELL or WAIT", "reason": "brief reason", "confidence": 1-10, "entry": price, "sl": price, "tp1": price, "tp2": price, "tp3": price}},
-  {{"symbol": "USTEC", "action": "BUY or SELL or WAIT", "reason": "brief reason", "confidence": 1-10, "entry": price, "sl": price, "tp1": price, "tp2": price, "tp3": price}},
-  {{"symbol": "USOIL", "action": "BUY or SELL or WAIT", "reason": "brief reason", "confidence": 1-10, "entry": price, "sl": price, "tp1": price, "tp2": price, "tp3": price}}
+  {symbols_json}
 ]"""
 
         response = requests.post(
@@ -433,236 +350,220 @@ Respond ONLY with a valid JSON array, no markdown, no explanation:
             },
             timeout=30
         )
+
         if response.status_code == 200:
             text = response.json()["content"][0]["text"].strip()
             if "```" in text:
                 text = text.split("```")[1]
-                if text.startswith("json"):
-                    text = text[4:]
+                if text.startswith("json"): text = text[4:]
             return json.loads(text.strip())
         else:
-            print(f"❌ Claude API Error: {response.status_code} | {response.text[:300]}")
+            print(f"❌ Claude Error: {response.status_code} | {response.text[:200]}")
             return None
     except Exception as e:
         print(f"❌ Claude Error: {e}")
         return None
 
-def calc_lot(balance, risk_pct, sl_points, symbol):
+# ==========================================
+# حساب الـ Lot
+# ==========================================
+def calc_lot(balance, risk_pct, sl_distance, symbol):
     risk_amount = balance * (risk_pct / 100)
+    if sl_distance <= 0: return 0.01
 
-    # حد أقصى للـ lot بناءً على الرصيد الحقيقي
-    if balance < 500:
-        max_lot = 0.01
-    elif balance < 1000:
-        max_lot = 0.05
-    elif balance < 3000:
-        max_lot = 0.1
-    elif balance < 5000:
-        max_lot = 0.5
-    else:
-        max_lot = 1.0
+    # تقريبي بناءً على قيمة النقطة
+    point_values = {
+        "XAUUSD": 1.0,
+        "BTCUSD": 0.001,
+        "ETHUSD": 0.01,
+        "USDJPY": 10.0,
+        "USTEC":  1.0,
+        "USOIL":  1.0,
+    }
+    pv = point_values.get(symbol, 1.0)
+    lot = risk_amount / (sl_distance * pv)
 
-    if symbol == "XAUUSD":
-        lot = risk_amount / (sl_points * 1.0)
-        min_lot = 0.01
-    elif symbol == "USDJPY":
-        lot = risk_amount / (sl_points * 10.0)
-        min_lot = 0.01
-    elif symbol == "USTEC":
-        lot = risk_amount / (sl_points * 1.0)
-        min_lot = 0.01
-    elif symbol == "USOIL":
-        lot = risk_amount / (sl_points * 1.0)
-        min_lot = 0.01
-    elif symbol == "ETHUSD":
-        lot = risk_amount / (sl_points * 0.01)
-        min_lot = 0.1
-        max_lot = max(max_lot, 0.1)
-    else:  # BTCUSD
-        lot = risk_amount / (sl_points * 0.001)
-        min_lot = 0.01
+    # حدود الـ lot
+    min_lots = {"ETHUSD": 0.1}
+    min_lot = min_lots.get(symbol, 0.01)
+    max_lot = 2.0
 
     return round(max(min_lot, min(lot, max_lot)), 2)
 
-def send_telegram(message):
+# ==========================================
+# Telegram
+# ==========================================
+def send_telegram(msg):
     try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        r = requests.post(url, json={"chat_id": CHAT_ID, "text": message}, timeout=15)
+        r = requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+            json={"chat_id": CHAT_ID, "text": msg},
+            timeout=15
+        )
         if r.status_code == 200:
             print(f"✅ Telegram sent | {datetime.now().strftime('%H:%M:%S')}")
-        else:
-            print(f"❌ Telegram error: {r.text}")
     except Exception as e:
-        print(f"❌ Telegram exception: {e}")
-
-def update_signal(decision, lot):
-    global signal_counter
-    signal_counter += 1
-    symbol = decision["symbol"]
-    latest_signals[symbol] = {
-        "id":         signal_counter,
-        "symbol":     symbol,
-        "action":     decision["action"],
-        "lot":        lot,
-        "entry":      decision["entry"],
-        "sl":         decision["sl"],
-        "tp1":        decision["tp1"],
-        "tp2":        decision["tp2"],
-        "tp3":        decision["tp3"],
-        "time":       datetime.now().strftime("%Y.%m.%d %H:%M"),
-        "reason":     decision.get("reason", ""),
-        "confidence": decision.get("confidence", 0)
-    }
-    print(f"📡 Signal updated | {symbol} | {decision['action']} | ID: {signal_counter}")
+        print(f"❌ Telegram: {e}")
 
 # ==========================================
-# الدورة الرئيسية
+# الدورة الرئيسية - كل 5 دقائق
 # ==========================================
 def run_analysis():
-    global daily_pnl, day_start_bal, last_day, real_balance, open_positions, day_start_real, current_news
+    global daily_pnl, last_day, day_start_real, signal_counter, current_news
 
     kuwait_tz = pytz.timezone(TIMEZONE)
     now = datetime.now(kuwait_tz)
+
     print(f"\n{'='*50}")
     print(f"🔄 Analysis | {now.strftime('%Y-%m-%d %H:%M')} Kuwait")
     print(f"{'='*50}")
 
+    # تصفير يوم جديد
     if now.date() != last_day:
         daily_pnl = 0.0
-        day_start_bal = ACCOUNT_BALANCE
         day_start_real = real_balance
         last_day = now.date()
         print("📅 New day reset")
 
+    # ويك اند - كريبتو فقط
+    active_symbols = SYMBOLS
     if now.weekday() >= 5:
-        global SYMBOLS
-        SYMBOLS = ["BTCUSD", "ETHUSD", "USTEC", "USOIL"]
-        print("📅 Weekend - Gold stopped, BTC continues")
-    else:
-        SYMBOLS = ["XAUUSD", "BTCUSD", "USDJPY", "ETHUSD", "USTEC", "USOIL"]
+        active_symbols = ["BTCUSD", "ETHUSD", "USTEC", "USOIL"]
+        print("📅 Weekend mode")
 
+    # حد الخسارة اليومية
     if daily_pnl <= -MAX_DAILY_LOSS:
-        print(f"🛑 Daily loss limit reached: {daily_pnl}%")
-        send_telegram(f"🛑 AI Bot: Daily loss limit {MAX_DAILY_LOSS}% reached. Stopped for today.")
+        print(f"🛑 Daily loss limit: {daily_pnl}%")
         return
 
-    global current_news
+    # الأخبار
     news = get_news_warning()
     if news:
         current_news = news
-        print(f"⚠️ News warning: {news} - Skipping (no Telegram)")
+        print(f"⚠️ News: {news} - Skipping")
         return
     else:
         current_news = None
 
+    # جلب البيانات
     market_data = []
-    for symbol in SYMBOLS:
+    for symbol in active_symbols:
         data = get_market_data(symbol)
         if data:
             market_data.append(data)
-            print(f"📊 {symbol}: ${data['price']} | RSI: {data['rsi']} | EMA8: {data['ema8']} vs EMA21: {data['ema21']}")
+            print(f"📊 {symbol}: ${data['price']} | H1:{data['h1_trend']} | M15:{data['m15_trend']} | M5 RSI:{data['m5_rsi']}")
 
     if not market_data:
-        print("❌ No market data available")
+        print("❌ No market data")
         return
 
-    print("🤖 Asking Claude AI...")
-    decisions = ask_gemini(market_data)
-
+    # Claude يحلل
+    print("🤖 Asking Claude AI (H1+M15+M5)...")
+    decisions = ask_claude(market_data)
     if not decisions:
-        print("❌ No decision from Claude")
+        print("❌ No decision")
         return
 
+    # تنفيذ القرارات
     for decision in decisions:
-        symbol = decision.get("symbol")
-        action = decision.get("action")
-        reason = decision.get("reason", "")
-        conf   = decision.get("confidence", 0)
+        symbol  = decision.get("symbol")
+        action  = decision.get("action")
+        reason  = decision.get("reason", "")
+        conf    = decision.get("confidence", 0)
 
-        print(f"\n📋 {symbol}: {action} | Confidence: {conf}/10 | {reason}")
+        print(f"📋 {symbol}: {action} | {conf}/10 | {reason}")
 
-        if action == "WAIT":
-            continue
-
-        # تحقق إذا في صفقة مفتوحة على نفس الزوج
-        if open_positions.get(symbol, False):
-            print(f"⏭️ {symbol}: Already has open position - Skip")
-            continue
-
+        if action == "WAIT": continue
         if conf < 7:
-            print(f"⏳ Confidence too low ({conf}/10) - Skip")
+            print(f"⏳ Low confidence ({conf}/10) - Skip")
+            continue
+        if open_positions.get(symbol, False):
+            print(f"⏭️ {symbol}: Already open - Skip")
             continue
 
-        sl_pts = abs(decision["entry"] - decision["sl"])
-        lot = calc_lot(real_balance, RISK_PERCENT, sl_pts, symbol)
+        # حساب الـ Lot
+        entry = decision.get("entry", 0)
+        sl    = decision.get("sl", 0)
+        sl_dist = abs(entry - sl)
+        lot = calc_lot(real_balance, RISK_PERCENT, sl_dist, symbol)
 
-        # ✅ تحديث Signal للـ EA
-        update_signal(decision, lot)
+        # تحديث الـ Signal
+        signal_counter += 1
+        latest_signals[symbol] = {
+            "id":         signal_counter,
+            "symbol":     symbol,
+            "action":     action,
+            "lot":        lot,
+            "entry":      entry,
+            "sl":         sl,
+            "tp1":        decision.get("tp1", 0),
+            "tp2":        decision.get("tp2", 0),
+            "tp3":        decision.get("tp3", 0),
+            "reason":     reason,
+            "confidence": conf,
+            "time":       now.strftime("%Y.%m.%d %H:%M"),
+        }
+        print(f"📡 Signal updated | {symbol} | {action} | ID:{signal_counter}")
 
+        # Telegram
         icon = "🟢" if action == "BUY" else "🔴"
-        msg = f"""{icon} AI Trading Signal
+        send_telegram(f"""{icon} AI Signal v2
 Symbol: {symbol}
 Action: {action}
 Confidence: {conf}/10
 Reason: {reason}
 ---
 Lot: {lot}
-Entry: {decision['entry']}
-SL: {decision['sl']}
+Entry: {entry}
+SL: {sl}
+TP1: {decision.get('tp1')}
+TP2: {decision.get('tp2')}
+TP3: {decision.get('tp3')}
 ---
-TP1: {decision['tp1']}
-TP2: {decision['tp2']}
-TP3: {decision['tp3']}
----
-{now.strftime('%Y-%m-%d %H:%M')} Kuwait"""
-        send_telegram(msg)
+{now.strftime('%Y-%m-%d %H:%M')} Kuwait
+[H1+M15+M5 Analysis]""")
 
+# ==========================================
+# تقرير يومي
+# ==========================================
 def daily_report():
     kuwait_tz = pytz.timezone(TIMEZONE)
     now = datetime.now(kuwait_tz)
-    if now.weekday() >= 5:
-        return
-    msg = f"""📊 Daily AI Trading Report
+    if now.weekday() >= 5: return
+    send_telegram(f"""📊 Daily Report v2
 Date: {now.strftime('%Y-%m-%d')}
----
-Balance: ${ACCOUNT_BALANCE}
-Daily P&L: {round(daily_pnl, 2)}%
+Balance: ${real_balance:,.2f}
+P&L: {'+' if daily_pnl > 0 else ''}{daily_pnl:.2f}%
 Status: {'🟢 Active' if daily_pnl > -MAX_DAILY_LOSS else '🛑 Stopped'}
----
-Symbols: {', '.join(SYMBOLS)}
-Interval: Every 15 minutes
-Risk per trade: {RISK_PERCENT}%"""
-    send_telegram(msg)
+Symbols: {len(SYMBOLS)}
+Strategy: H1+M15+M5 Multi-Timeframe""")
 
 # ==========================================
-# تشغيل البوت
+# تشغيل
 # ==========================================
 if __name__ == "__main__":
     import sys
 
-    print("🤖 AI Trading Bot - Claude Powered")
+    print("🤖 AI Trading Bot v2 - Multi-Timeframe")
     print(f"📊 Symbols: {', '.join(SYMBOLS)}")
-    print(f"⏱️  Interval: Every 15 minutes")
-    print(f"💰 Balance: ${ACCOUNT_BALANCE} | Risk: {RISK_PERCENT}%")
-    print(f"🛡️  Max Daily Loss: {MAX_DAILY_LOSS}% | Max DD: {MAX_DRAWDOWN}%")
+    print(f"⏱️  Interval: Every 5 minutes")
+    print(f"📈 Strategy: H1 Trend + M15 Confirm + M5 Entry")
     print("="*50)
 
     if len(sys.argv) > 1 and sys.argv[1] == "test":
-        print("🧪 Test mode - Running analysis now...")
         run_analysis()
         sys.exit(0)
 
-    # ✅ Flask في thread منفصل
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     print("🌐 Signal server running on port 8080")
 
-    schedule.every(15).minutes.do(run_analysis)
+    schedule.every(5).minutes.do(run_analysis)
     schedule.every().day.at("20:00").do(daily_report)
 
     run_analysis()
 
-    print("\n✅ Bot running... Press Ctrl+C to stop")
+    print("\n✅ Bot running...")
     while True:
         schedule.run_pending()
         time.sleep(30)
