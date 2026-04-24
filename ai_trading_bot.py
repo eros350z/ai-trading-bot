@@ -534,26 +534,39 @@ def run_analysis():
         entry  = decision.get("entry", 0)
         sl     = decision.get("sl", 0)
 
-        # الحد الأدنى للـ SL = ATR × 1.5 على M5
+        # الحد الأدنى للـ SL لكل زوج
+        min_sl_dists = {
+            "XAUUSD": 2.0,
+            "BTCUSD": 200.0,
+            "ETHUSD": 5.0,
+            "USDJPY": 0.15,
+            "USTEC":  50.0,
+            "USOIL":  0.30,
+        }
+
         market = next((d for d in market_data if d["symbol"] == symbol), None)
         if market:
-            min_sl_dist = market["m5_atr"] * 1.5
+            atr_sl   = market["m5_atr"] * 1.5
+            fixed_sl = min_sl_dists.get(symbol, 0)
+            min_sl_dist = max(atr_sl, fixed_sl)
             sl_dist = abs(entry - sl)
             if sl_dist < min_sl_dist:
                 sl_dist = min_sl_dist
                 if action == "BUY":
-                    sl = round(entry - sl_dist, 5)
+                    sl  = round(entry - sl_dist, 5)
+                    tp1 = round(entry + sl_dist * 1.5, 5)
+                    tp2 = round(entry + sl_dist * 2.5, 5)
+                    tp3 = round(entry + sl_dist * 4.0, 5)
                 else:
-                    sl = round(entry + sl_dist, 5)
-                # تحديث الـ TP
-                tp1 = round(entry + sl_dist * 1.5, 5) if action == "BUY" else round(entry - sl_dist * 1.5, 5)
-                tp2 = round(entry + sl_dist * 2.5, 5) if action == "BUY" else round(entry - sl_dist * 2.5, 5)
-                tp3 = round(entry + sl_dist * 4.0, 5) if action == "BUY" else round(entry - sl_dist * 4.0, 5)
+                    sl  = round(entry + sl_dist, 5)
+                    tp1 = round(entry - sl_dist * 1.5, 5)
+                    tp2 = round(entry - sl_dist * 2.5, 5)
+                    tp3 = round(entry - sl_dist * 4.0, 5)
                 decision["sl"]  = sl
                 decision["tp1"] = tp1
                 decision["tp2"] = tp2
                 decision["tp3"] = tp3
-                print(f"📐 SL adjusted to ATR×1.5 | SL dist: {sl_dist:.5f}")
+                print(f"📐 SL adjusted | {symbol} | dist: {sl_dist:.5f} (ATR:{atr_sl:.5f} | Fixed:{fixed_sl})")
         else:
             sl_dist = abs(entry - sl)
 
