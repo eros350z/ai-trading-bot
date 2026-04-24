@@ -114,7 +114,10 @@ def dashboard():
             <td>{sig.get("tp1","-")}</td>
         </tr>"""
 
-    pnl_color = "#ff4444" if daily_pnl < 0 else "#00ff88"
+    pnl_color    = "#ff4444" if daily_pnl < 0 else "#00ff88"
+    status_color = "#00ff88" if bot_enabled else "#ff4444"
+    status_bg    = "#1a2a1a" if bot_enabled else "#2a1a1a"
+    status_text  = "🟢 شغال" if bot_enabled else "🔴 متوقف"
 
     return f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -148,8 +151,8 @@ td{{padding:10px 14px;border-top:1px solid #1a1a2e;font-size:0.88em}}
 <div class="header">
   <h1>🤖 AI Trading Bot v2 <span class="dot"></span></h1>
   <div style="display:flex;align-items:center;gap:15px">
-    <span style="background:{'#1a2a1a' if bot_enabled else '#2a1a1a'};border:1px solid {'#00ff88' if bot_enabled else '#ff4444'};color:{'#00ff88' if bot_enabled else '#ff4444'};padding:4px 12px;border-radius:6px;font-size:0.85em">
-      {'🟢 شغال' if bot_enabled else '🔴 متوقف'}
+    <span style="background:{status_bg};border:1px solid {status_color};color:{status_color};padding:4px 12px;border-radius:6px;font-size:0.85em">
+      {status_text}
     </span>
     <div class="time">🕐 {now.strftime('%Y-%m-%d %H:%M')} Kuwait &nbsp;|&nbsp; <span class="badge">H1 + M15 + M5</span></div>
   </div>
