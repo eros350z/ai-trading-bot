@@ -404,7 +404,7 @@ def ask_gemini(market_data_list):
         context += f"""
 Balance:${ACCOUNT_BALANCE} Risk:{RISK_PERCENT}% DailyPnL:{round(daily_pnl,2)}%
 Rules: EMA8>EMA21=uptrend, RSI buy:40-65 sell:35-60, avoid RSI>75 or <25
-SL=0.8xATR, TP1=1.5xATR, TP2=2.5xATR, TP3=4xATR
+SL=1.5xATR, TP1=2xATR, TP2=3xATR, TP3=5xATR
 
 Respond ONLY with a valid JSON array, no markdown, no explanation:
 [
