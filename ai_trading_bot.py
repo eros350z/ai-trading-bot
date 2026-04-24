@@ -371,7 +371,7 @@ def calc_lot(balance, risk_pct, sl_distance, symbol):
     risk_amount = balance * (risk_pct / 100)
     if sl_distance <= 0: return 0.01
 
-    # تقريبي بناءً على قيمة النقطة
+    # قيمة النقطة لكل زوج
     point_values = {
         "XAUUSD": 1.0,
         "BTCUSD": 0.001,
@@ -383,10 +383,24 @@ def calc_lot(balance, risk_pct, sl_distance, symbol):
     pv = point_values.get(symbol, 1.0)
     lot = risk_amount / (sl_distance * pv)
 
-    # حدود الـ lot
+    # حد أقصى بناءً على الرصيد
+    if balance < 500:
+        max_lot = 0.05
+    elif balance < 1000:
+        max_lot = 0.1
+    elif balance < 3000:
+        max_lot = 0.2
+    elif balance < 5000:
+        max_lot = 0.5
+    else:
+        max_lot = 1.0
+
+    # حد أدنى لكل زوج
     min_lots = {"ETHUSD": 0.1}
     min_lot = min_lots.get(symbol, 0.01)
-    max_lot = 2.0
+
+    # تأكد إن max_lot أكبر من min_lot
+    max_lot = max(max_lot, min_lot)
 
     return round(max(min_lot, min(lot, max_lot)), 2)
 
