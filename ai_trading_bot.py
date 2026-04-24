@@ -25,7 +25,7 @@ TIMEZONE    = "Asia/Kuwait"
 
 RISK_PERCENT   = 1.0
 MAX_DAILY_LOSS = 2.0
-SYMBOLS = ["XAUUSD", "BTCUSD", "ETHUSD", "USDJPY", "USTEC", "USOIL"]
+SYMBOLS = ["XAUUSD", "BTCUSD", "USDJPY", "USTEC", "USOIL"]
 
 # ==========================================
 # متغيرات
@@ -192,7 +192,6 @@ def get_market_data(symbol):
         ticker_map = {
             "XAUUSD": "GC=F",
             "BTCUSD": "BTC-USD",
-            "ETHUSD": "ETH-USD",
             "USDJPY": "JPY=X",
             "USTEC":  "NQ=F",
             "USOIL":  "CL=F",
@@ -404,7 +403,6 @@ def calc_lot(balance, risk_pct, sl_distance, symbol):
     point_values = {
         "XAUUSD": 1.0,
         "BTCUSD": 0.001,
-        "ETHUSD": 0.01,
         "USDJPY": 10.0,
         "USTEC":  1.0,
         "USOIL":  1.0,
@@ -425,7 +423,7 @@ def calc_lot(balance, risk_pct, sl_distance, symbol):
         max_lot = 1.0
 
     # حد أدنى لكل زوج
-    min_lots = {"ETHUSD": 0.1}
+    min_lots = {}
     min_lot = min_lots.get(symbol, 0.01)
 
     # تأكد إن max_lot أكبر من min_lot
@@ -476,7 +474,7 @@ def run_analysis():
     # ويك اند - كريبتو فقط
     active_symbols = SYMBOLS
     if now.weekday() >= 5:
-        active_symbols = ["BTCUSD", "ETHUSD", "USTEC", "USOIL"]
+        active_symbols = ["BTCUSD", "USTEC", "USOIL"]
         print("📅 Weekend mode")
 
     # حد الخسارة اليومية
