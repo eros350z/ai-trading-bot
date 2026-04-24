@@ -36,6 +36,8 @@ daily_pnl      = 0.0
 last_day       = datetime.now().date()
 signal_counter = 0
 current_news   = None
+bot_enabled    = True  # تحكم يدوي بالبوت
+stoppedToday   = False  # توقف بسبب الخسارة اليومية
 
 open_positions = {s: False for s in SYMBOLS}
 latest_signals = {s: {"action": "WAIT", "id": 0} for s in SYMBOLS}
@@ -73,6 +75,20 @@ def update_balance():
             daily_pnl = round(((real_balance - day_start_real) / day_start_real) * 100, 2)
         print(f"💰 Balance: ${real_balance} | P&L: {daily_pnl}%")
     return jsonify({"status": "ok"})
+
+@app.route("/control/<action>")
+def control_bot(action):
+    global bot_enabled, stoppedToday
+    if action == "enable":
+        bot_enabled = True
+        stoppedToday = False
+        print("✅ Bot manually ENABLED")
+        return jsonify({"status": "enabled"})
+    elif action == "disable":
+        bot_enabled = False
+        print("🛑 Bot manually DISABLED")
+        return jsonify({"status": "disabled"})
+    return jsonify({"status": "unknown"})
 
 @app.route("/")
 def dashboard():
@@ -149,7 +165,12 @@ td{{padding:10px 14px;border-top:1px solid #1a1a2e;font-size:0.88em}}
     <tbody>{rows}</tbody>
   </table>
 </div>
-<div class="footer">AI Trading Bot v2 — Multi-Timeframe | Powered by Claude AI</div>
+<div style="text-align:center;padding:15px 30px">
+  <a href="/control/enable" style="background:#1D9E75;color:#fff;padding:10px 25px;border-radius:8px;text-decoration:none;margin:5px;display:inline-block">✅ تشغيل البوت</a>
+  <a href="/control/disable" style="background:#E24B4A;color:#fff;padding:10px 25px;border-radius:8px;text-decoration:none;margin:5px;display:inline-block">🛑 إيقاف البوت</a>
+</div>
+<div class="footer">AI Trading Bot v2 — Multi-Timeframe | Powered by Claude AI<br>
+Status: {'🟢 Active' if bot_enabled else '🔴 Disabled'} | Daily Loss: {daily_pnl:.2f}%</div>
 </body></html>"""
 
 def run_flask():
@@ -423,7 +444,7 @@ def send_telegram(msg):
 # الدورة الرئيسية - كل 5 دقائق
 # ==========================================
 def run_analysis():
-    global daily_pnl, last_day, day_start_real, signal_counter, current_news
+    global daily_pnl, last_day, day_start_real, signal_counter, current_news, bot_enabled, stoppedToday
 
     kuwait_tz = pytz.timezone(TIMEZONE)
     now = datetime.now(kuwait_tz)
@@ -431,6 +452,11 @@ def run_analysis():
     print(f"\n{'='*50}")
     print(f"🔄 Analysis | {now.strftime('%Y-%m-%d %H:%M')} Kuwait")
     print(f"{'='*50}")
+
+    # تحقق من التشغيل اليدوي
+    if not bot_enabled:
+        print("🛑 Bot is manually disabled")
+        return
 
     # تصفير يوم جديد
     if now.date() != last_day:
@@ -447,6 +473,7 @@ def run_analysis():
 
     # حد الخسارة اليومية
     if daily_pnl <= -MAX_DAILY_LOSS:
+        stoppedToday = True
         print(f"🛑 Daily loss limit: {daily_pnl}%")
         return
 
@@ -575,6 +602,9 @@ if __name__ == "__main__":
     schedule.every(5).minutes.do(run_analysis)
     schedule.every().day.at("20:00").do(daily_report)
 
+    # انتظر دقيقة لاستلام الرصيد الحقيقي من MT5
+    print("⏳ Waiting 60s for MT5 balance...")
+    time.sleep(60)
     run_analysis()
 
     print("\n✅ Bot running...")
