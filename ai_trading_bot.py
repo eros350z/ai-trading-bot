@@ -105,6 +105,9 @@ def update_balance():
     data = request.get_json()
     if data and "balance" in data:
         real_balance = float(data["balance"])
+        # أول مرة يوصل رصيد حقيقي → يصير هو day_start_real
+        if day_start_real == ACCOUNT_BALANCE and real_balance != ACCOUNT_BALANCE:
+            day_start_real = real_balance
         if day_start_real > 0:
             daily_pnl = round(((real_balance - day_start_real) / day_start_real) * 100, 2)
         print(f"💰 Balance updated from MT5: ${real_balance} | P&L: {daily_pnl}%")
