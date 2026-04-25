@@ -25,7 +25,7 @@ TIMEZONE    = "Asia/Kuwait"
 
 RISK_PERCENT   = 1.0
 MAX_DAILY_LOSS = 2.0
-SYMBOLS = ["XAUUSD", "BTCUSD", "USDJPY", "USTEC", "USOIL"]
+SYMBOLS = ["XAUUSD", "BTCUSD", "USDJPY", "USOIL"]
 
 # ==========================================
 # متغيرات
@@ -329,9 +329,9 @@ ANALYSIS FRAMEWORK:
 3. M5 = Precise entry signal (pullback to EMA or breakout)
 
 ENTRY RULES:
-- BUY only when: H1 trend=UP AND M15 trend=UP AND M5 shows bullish signal (price above M5 EMA9, RSI 40-65)
-- SELL only when: H1 trend=DOWN AND M15 trend=DOWN AND M5 shows bearish signal (price below M5 EMA9, RSI 35-60)
-- WAIT if timeframes conflict or RSI is extreme (>75 or <25)
+- BUY only when: H1 trend=UP AND M15 trend=UP AND M5 shows bullish signal (price above M5 EMA9, RSI 45-62)
+- SELL only when: H1 trend=DOWN AND M15 trend=DOWN AND M5 shows bearish signal (price below M5 EMA9, RSI 38-55)
+- WAIT if timeframes conflict or RSI is extreme (>70 or <30) or H1 RSI >68
 
 RISK RULES:
 - SL = swing_low for BUY, swing_high for SELL (already calculated)
@@ -423,13 +423,12 @@ def calc_lot(balance, risk_pct, sl_distance, symbol):
         max_lot = 1.0
 
     # حد أدنى لكل زوج
-    min_lots = {}
-    min_lot = min_lots.get(symbol, 0.01)
+    min_lot = 0.05
 
     # تأكد إن max_lot أكبر من min_lot
     max_lot = max(max_lot, min_lot)
 
-    return round(max(min_lot, min(lot, max_lot)), 2)
+    return round(max(0.05, min(lot, max_lot)), 2)
 
 # ==========================================
 # Telegram
@@ -474,7 +473,7 @@ def run_analysis():
     # ويك اند - كريبتو فقط
     active_symbols = SYMBOLS
     if now.weekday() >= 5:
-        active_symbols = ["BTCUSD", "USTEC", "USOIL"]
+        active_symbols = ["BTCUSD"]
         print("📅 Weekend mode")
 
     # حد الخسارة اليومية
