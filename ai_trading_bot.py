@@ -534,8 +534,16 @@ def run_analysis():
 
         market = next((d for d in market_data if d["symbol"] == symbol), None)
         if market:
-            # SL = H1 ATR × 1.5 (مثل v1 الأصلي اللي كان يربح)
-            sl_dist = market["h1_atr"] * 1.5
+            # SL = H1 ATR × 1.5 مع حد أدنى ثابت لكل زوج
+            min_sl_dists = {
+                "XAUUSD": 2.0,
+                "BTCUSD": 200.0,
+                "USDJPY": 0.15,
+                "USOIL":  0.50,
+            }
+            atr_sl = market["h1_atr"] * 1.5
+            fixed_sl = min_sl_dists.get(symbol, 0)
+            sl_dist = max(atr_sl, fixed_sl)
 
             if action == "BUY":
                 sl  = round(entry - sl_dist, 5)
