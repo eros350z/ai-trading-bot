@@ -541,7 +541,11 @@ def run_analysis():
                 "USDJPY": 0.15,
                 "USOIL":  0.50,
             }
-            atr_sl = market["h1_atr"] * 1.5
+            # USOIL يستخدم ATR × 2 عشان SL أوسع
+            if symbol == "USOIL":
+                atr_sl = market["h1_atr"] * 2.0
+            else:
+                atr_sl = market["h1_atr"] * 1.5
             fixed_sl = min_sl_dists.get(symbol, 0)
             sl_dist = max(atr_sl, fixed_sl)
 
