@@ -25,6 +25,7 @@ TIMEZONE    = "Asia/Kuwait"
 
 RISK_PERCENT   = 1.0
 MAX_DAILY_LOSS = 2.0
+SYMBOLS        = ["XAUUSD", "BTCUSD", "USDJPY"]
 
 # ==========================================
 # متغيرات
