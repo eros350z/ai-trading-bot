@@ -25,7 +25,6 @@ TIMEZONE    = "Asia/Kuwait"
 
 RISK_PERCENT   = 1.0
 MAX_DAILY_LOSS = 2.0
-SYMBOLS = ["XAUUSD", "BTCUSD", "USDJPY", "USOIL"]
 
 # ==========================================
 # متغيرات
@@ -196,7 +195,6 @@ def get_market_data(symbol):
             "XAUUSD": "GC=F",
             "BTCUSD": "BTC-USD",
             "USDJPY": "JPY=X",
-            "USOIL":  "CL=F",
         }
         ticker = ticker_map.get(symbol, symbol)
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -406,7 +404,6 @@ def calc_lot(balance, risk_pct, sl_distance, symbol):
         "XAUUSD": 1.0,
         "BTCUSD": 0.001,
         "USDJPY": 10.0,
-        "USOIL":  1.0,
     }
     pv = point_values.get(symbol, 1.0)
     lot = risk_amount / (sl_distance * pv)
@@ -539,10 +536,7 @@ def run_analysis():
                 "XAUUSD": 2.0,
                 "BTCUSD": 200.0,
                 "USDJPY": 0.15,
-                "USOIL":  0.50,
             }
-            # USOIL يستخدم ATR × 2 عشان SL أوسع
-            if symbol == "USOIL":
                 atr_sl = market["h1_atr"] * 2.0
             else:
                 atr_sl = market["h1_atr"] * 1.5
