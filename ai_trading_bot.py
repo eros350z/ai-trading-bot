@@ -537,9 +537,7 @@ def run_analysis():
                 "BTCUSD": 200.0,
                 "USDJPY": 0.15,
             }
-                atr_sl = market["h1_atr"] * 2.0
-            else:
-                atr_sl = market["h1_atr"] * 1.5
+            atr_sl = market["h1_atr"] * 1.5
             fixed_sl = min_sl_dists.get(symbol, 0)
             sl_dist = max(atr_sl, fixed_sl)
 
