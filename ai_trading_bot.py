@@ -78,12 +78,15 @@ def update_balance():
 
 @app.route("/control/<action>")
 def control_bot(action):
-    global bot_enabled, stoppedToday
+    global bot_enabled, stoppedToday, daily_pnl, day_start_real
     if action == "enable":
         bot_enabled = True
         stoppedToday = False
-        print("✅ Bot manually ENABLED")
-        return jsonify({"status": "enabled"})
+        # إعادة ضبط الـ P&L من الرصيد الحالي
+        day_start_real = real_balance
+        daily_pnl = 0.0
+        print("✅ Bot manually ENABLED | P&L reset | New start: $" + str(real_balance))
+        return jsonify({"status": "enabled", "balance": real_balance, "pnl_reset": True})
     elif action == "disable":
         bot_enabled = False
         print("🛑 Bot manually DISABLED")
@@ -193,7 +196,6 @@ def get_market_data(symbol):
             "XAUUSD": "GC=F",
             "BTCUSD": "BTC-USD",
             "USDJPY": "JPY=X",
-            "USTEC":  "NQ=F",
             "USOIL":  "CL=F",
         }
         ticker = ticker_map.get(symbol, symbol)
@@ -404,7 +406,6 @@ def calc_lot(balance, risk_pct, sl_distance, symbol):
         "XAUUSD": 1.0,
         "BTCUSD": 0.001,
         "USDJPY": 10.0,
-        "USTEC":  1.0,
         "USOIL":  1.0,
     }
     pv = point_values.get(symbol, 1.0)
