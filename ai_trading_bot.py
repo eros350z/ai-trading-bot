@@ -25,7 +25,7 @@ TIMEZONE    = "Asia/Kuwait"
 
 RISK_PERCENT   = 1.0
 MAX_DAILY_LOSS = 2.0
-SYMBOLS        = ["XAUUSD", "BTCUSD", "USDJPY"]
+SYMBOLS        = ["XAUUSD", "BTCUSD"]
 
 # ==========================================
 # متغيرات
@@ -39,8 +39,9 @@ current_news   = None
 bot_enabled    = True  # تحكم يدوي بالبوت
 stoppedToday   = False  # توقف بسبب الخسارة اليومية
 
-open_positions = {s: False for s in SYMBOLS}
-latest_signals = {s: {"action": "WAIT", "id": 0} for s in SYMBOLS}
+open_positions  = {s: False for s in SYMBOLS}
+latest_signals  = {s: {"action": "WAIT", "id": 0} for s in SYMBOLS}
+last_signal_ids = {s: 0 for s in SYMBOLS}  # آخر ID نُفِّذ لكل زوج
 
 # تخزين الأخبار
 _news_cache     = []
@@ -195,7 +196,6 @@ def get_market_data(symbol):
         ticker_map = {
             "XAUUSD": "GC=F",
             "BTCUSD": "BTC-USD",
-            "USDJPY": "JPY=X",
         }
         ticker = ticker_map.get(symbol, symbol)
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -404,7 +404,6 @@ def calc_lot(balance, risk_pct, sl_distance, symbol):
     point_values = {
         "XAUUSD": 1.0,
         "BTCUSD": 0.001,
-        "USDJPY": 10.0,
     }
     pv = point_values.get(symbol, 1.0)
     lot = risk_amount / (sl_distance * pv)
@@ -536,8 +535,7 @@ def run_analysis():
             min_sl_dists = {
                 "XAUUSD": 2.0,
                 "BTCUSD": 200.0,
-                "USDJPY": 0.15,
-            }
+                }
             atr_sl = market["h1_atr"] * 1.5
             fixed_sl = min_sl_dists.get(symbol, 0)
             sl_dist = max(atr_sl, fixed_sl)
@@ -564,7 +562,11 @@ def run_analysis():
         lot = calc_lot(real_balance, RISK_PERCENT, sl_dist, symbol)
 
         # تحديث الـ Signal
-        signal_counter += 1
+        # فقط نحدث الـ ID لو تغير الاتجاه
+        prev_action = latest_signals[symbol].get("action", "WAIT")
+        if action != prev_action:
+            signal_counter += 1
+        last_signal_ids[symbol] = signal_counter
         latest_signals[symbol] = {
             "id":         signal_counter,
             "symbol":     symbol,
