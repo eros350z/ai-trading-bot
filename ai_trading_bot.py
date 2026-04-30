@@ -647,9 +647,9 @@ if __name__ == "__main__":
     schedule.every(5).minutes.do(run_analysis)
     schedule.every().day.at("20:00").do(daily_report)
 
-    # انتظر لاستلام الرصيد والـ positions من MT5
-    print("⏳ Waiting 120s for MT5 sync...")
-    time.sleep(120)
+    # انتظر دقيقة لاستلام الرصيد الحقيقي من MT5
+    print("⏳ Waiting 60s for MT5 balance...")
+    time.sleep(60)
     run_analysis()
 
     print("\n✅ Bot running...")
