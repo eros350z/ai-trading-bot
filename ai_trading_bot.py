@@ -39,8 +39,9 @@ current_news   = None
 bot_enabled    = True  # تحكم يدوي بالبوت
 stoppedToday   = False  # توقف بسبب الخسارة اليومية
 
-open_positions  = {s: False for s in SYMBOLS}
-latest_signals  = {s: {"action": "WAIT", "id": 0} for s in SYMBOLS}
+open_positions        = {s: False for s in SYMBOLS}
+positions_initialized = False  # يصير True بعد أول تقرير من الـ EA
+latest_signals        = {s: {"action": "WAIT", "id": 0} for s in SYMBOLS}
 last_signal_ids = {s: 0 for s in SYMBOLS}  # آخر ID نُفِّذ لكل زوج
 
 # تخزين الأخبار
@@ -58,10 +59,13 @@ def get_signal(symbol):
 
 @app.route("/positions", methods=["POST"])
 def update_positions():
-    global open_positions
+    global open_positions, positions_initialized
     data = request.get_json()
     if data and "positions" in data:
         open_positions = data["positions"]
+        if not positions_initialized:
+            positions_initialized = True
+            print("✅ Positions initialized from EA")
     return jsonify({"status": "ok"})
 
 @app.route("/balance", methods=["POST"])
@@ -461,6 +465,12 @@ def run_analysis():
         print("🛑 Bot is manually disabled")
         return
 
+    # انتظر حتى الـ EA يرسل الـ positions بعد الريستارت
+    if not positions_initialized:
+        print("⏳ Waiting for EA to report open positions - skipping this cycle")
+        send_telegram("⏳ Bot restarted - waiting for EA position sync before trading...")
+        return
+
     # تصفير يوم جديد
     if now.date() != last_day:
         daily_pnl = 0.0
@@ -637,9 +647,9 @@ if __name__ == "__main__":
     schedule.every(5).minutes.do(run_analysis)
     schedule.every().day.at("20:00").do(daily_report)
 
-    # انتظر دقيقة لاستلام الرصيد الحقيقي من MT5
-    print("⏳ Waiting 60s for MT5 balance...")
-    time.sleep(60)
+    # انتظر لاستلام الرصيد والـ positions من MT5
+    print("⏳ Waiting 120s for MT5 sync...")
+    time.sleep(120)
     run_analysis()
 
     print("\n✅ Bot running...")
