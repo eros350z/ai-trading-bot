@@ -562,10 +562,8 @@ def run_analysis():
         lot = calc_lot(real_balance, RISK_PERCENT, sl_dist, symbol)
 
         # تحديث الـ Signal
-        # فقط نحدث الـ ID لو تغير الاتجاه
-        prev_action = latest_signals[symbol].get("action", "WAIT")
-        if action != prev_action:
-            signal_counter += 1
+        # نحدث الـ ID في كل إشارة جديدة
+        signal_counter += 1
         last_signal_ids[symbol] = signal_counter
         latest_signals[symbol] = {
             "id":         signal_counter,
