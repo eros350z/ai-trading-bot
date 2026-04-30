@@ -562,11 +562,11 @@ def run_analysis():
         lot = calc_lot(real_balance, RISK_PERCENT, sl_dist, symbol)
 
         # تحديث الـ Signal
-        # نحدث الـ ID في كل إشارة جديدة
+        # ID بناءً على الوقت عشان يكون فريد دايماً
         signal_counter += 1
-        last_signal_ids[symbol] = signal_counter
+        sig_id = int(time.time())
         latest_signals[symbol] = {
-            "id":         signal_counter,
+            "id":         sig_id,
             "symbol":     symbol,
             "action":     action,
             "lot":        lot,
