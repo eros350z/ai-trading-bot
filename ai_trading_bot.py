@@ -374,7 +374,7 @@ MARKET DATA:
 {d['symbol']} | Price: {d['price']}
 H1:  Trend={d['h1_trend']} | EMA21={d['h1_ema21']} | EMA50={d['h1_ema50']} | RSI={d['h1_rsi']} | ATR={d['h1_atr']}
 M15: Trend={d['m15_trend']} | EMA9={d['m15_ema9']} | EMA21={d['m15_ema21']} | RSI={d['m15_rsi']} | ATR={d['m15_atr']}
-M5:  EMA9={d['m5_ema9']} | EMA21={d['m5_ema21']} | RSI={d['m5_rsi']} | ATR={d['m5_atr']} | Last5={d['m5_last5']}
+M5:  EMA9={d['m5_ema9']} | EMA21={d['m5_ema21']} | RSI={d['m5_rsi']} | Last5={d['m5_last5']}
 SL_BUY={d['swing_low']} | SL_SELL={d['swing_high']}
 ---"""
 
