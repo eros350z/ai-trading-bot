@@ -42,7 +42,8 @@ stoppedToday   = False  # توقف بسبب الخسارة اليومية
 open_positions        = {s: False for s in SYMBOLS}
 positions_initialized = False  # يصير True بعد أول تقرير من الـ EA
 latest_signals        = {s: {"action": "WAIT", "id": 0} for s in SYMBOLS}
-last_signal_ids = {s: 0 for s in SYMBOLS}  # آخر ID نُفِّذ لكل زوج
+last_signal_ids       = {s: 0 for s in SYMBOLS}
+ea_market_data        = {}  # بيانات السوق الحقيقية من الـ EA
 
 # تخزين الأخبار
 _news_cache     = []
@@ -66,6 +67,18 @@ def update_positions():
         if not positions_initialized:
             positions_initialized = True
             print("✅ Positions initialized from EA")
+    return jsonify({"status": "ok"})
+
+@app.route("/marketdata", methods=["POST"])
+def update_market_data():
+    global ea_market_data
+    data = request.get_json()
+    if data and "symbols" in data:
+        for sym_data in data["symbols"]:
+            symbol = sym_data.get("symbol")
+            if symbol:
+                ea_market_data[symbol] = sym_data
+        print(f"📊 Market data received from EA: {list(ea_market_data.keys())}")
     return jsonify({"status": "ok"})
 
 @app.route("/balance", methods=["POST"])
@@ -193,9 +206,19 @@ def run_flask():
     app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
 
 # ==========================================
-# جلب البيانات - Multi-Timeframe
+# جلب البيانات - من الـ EA أولاً، Yahoo كـ fallback
 # ==========================================
 def get_market_data(symbol):
+    # أولاً: استخدم بيانات الـ EA إذا موجودة وحديثة
+    if symbol in ea_market_data:
+        print(f"✅ Using MT5 data for {symbol}")
+        return ea_market_data[symbol]
+
+    # ثانياً: Yahoo Finance كـ fallback
+    print(f"⚠️ EA data not available for {symbol}, using Yahoo fallback")
+    return get_market_data_yahoo(symbol)
+
+def get_market_data_yahoo(symbol):
     try:
         ticker_map = {
             "XAUUSD": "GC=F",
