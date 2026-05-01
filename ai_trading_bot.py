@@ -352,14 +352,26 @@ def ask_claude(market_data_list):
 Analyze the following market data across 3 timeframes (H1, M15, M5) and make precise trading decisions.
 
 ANALYSIS FRAMEWORK:
-1. H1 = Overall trend direction (must align with trade direction)
-2. M15 = Trend confirmation (must confirm H1 direction)  
-3. M5 = Precise entry signal (pullback to EMA or breakout)
+1. H1 = Overall trend direction (primary bias)
+2. M15 = Trend confirmation or pullback signal
+3. M5 = Precise entry signal
 
-ENTRY RULES:
-- BUY only when: H1 trend=UP AND M15 trend=UP AND M5 shows bullish signal (price above M5 EMA9, RSI 45-62)
-- SELL only when: H1 trend=DOWN AND M15 trend=DOWN AND M5 shows bearish signal (price below M5 EMA9, RSI 38-55)
-- WAIT if timeframes conflict or RSI is extreme (>70 or <30) or H1 RSI >68
+ENTRY RULES — TWO VALID SETUPS:
+
+SETUP A (Trend Following — highest confidence):
+- BUY: H1=UP AND M15=UP AND M5 RSI between 40-62 AND price above M5 EMA9
+- SELL: H1=DOWN AND M15=DOWN AND M5 RSI between 38-60 AND price below M5 EMA9
+- Minimum confidence: 7/10
+
+SETUP B (Pullback Trading — medium confidence):
+- BUY: H1=UP AND M15=DOWN AND M5 RSI < 35 (oversold pullback into uptrend)
+- SELL: H1=DOWN AND M15=UP AND M5 RSI > 65 (overbought pullback into downtrend)
+- Minimum confidence: 7/10
+
+HARD FILTERS — ALWAYS WAIT if any of these:
+- H1 RSI > 72 (extreme overbought) or H1 RSI < 28 (extreme oversold)
+- M5 RSI > 75 or M5 RSI < 25
+- Both H1 and M15 RSI > 68 simultaneously
 
 RISK RULES:
 - SL = swing_low for BUY, swing_high for SELL (already calculated)
