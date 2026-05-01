@@ -471,12 +471,21 @@ def run_analysis():
         send_telegram("⏳ Bot restarted - waiting for EA position sync before trading...")
         return
 
-    # تصفير يوم جديد
+    # تصفير يوم جديد (بتوقيت الكويت)
     if now.date() != last_day:
-        daily_pnl = 0.0
+        daily_pnl      = 0.0
         day_start_real = real_balance
-        last_day = now.date()
-        print("📅 New day reset")
+        last_day       = now.date()
+        stoppedToday   = False
+        print("📅 New day reset (Kuwait time)")
+        send_telegram("📅 يوم جديد — البوت شغال من جديد ✅")
+
+    # ساعات التداول (7 صباحاً - 11 مساءً بتوقيت الكويت)
+    TRADING_START = 7
+    TRADING_END   = 23
+    if not (TRADING_START <= now.hour < TRADING_END):
+        print(f"🌙 خارج ساعات التداول ({now.strftime('%H:%M')} Kuwait) - توقف حتى 07:00")
+        return
 
     # ويك اند - كريبتو فقط
     active_symbols = SYMBOLS
@@ -486,8 +495,10 @@ def run_analysis():
 
     # حد الخسارة اليومية
     if daily_pnl <= -MAX_DAILY_LOSS:
-        stoppedToday = True
-        print(f"🛑 Daily loss limit: {daily_pnl}%")
+        if not stoppedToday:
+            stoppedToday = True
+            print(f"🛑 Daily loss limit reached: {daily_pnl}%")
+            send_telegram(f"🛑 وصلنا لحد الخسارة اليومي ({daily_pnl:.2f}%) — البوت متوقف لباقي اليوم")
         return
 
     # الأخبار
