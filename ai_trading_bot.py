@@ -436,36 +436,44 @@ Respond ONLY with valid JSON array, no markdown:
 # حساب الـ Lot
 # ==========================================
 def calc_lot(balance, risk_pct, sl_distance, symbol):
-    risk_amount = balance * (risk_pct / 100)
+    """
+    Risk Management: يحسب حجم الصفقة بناءً على نسبة المخاطرة والـ SL
+    الهدف: خسارة ثابتة = نسبة محددة من الرصيد مهما كان حجم الـ SL
+    """
+    risk_amount = balance * (risk_pct / 100)  # المبلغ اللي نرضى نخسره
     if sl_distance <= 0: return 0.01
 
-    # قيمة النقطة لكل زوج
+    # قيمة كل نقطة لكل زوج (بالدولار لكل lot)
     point_values = {
-        "XAUUSD": 1.0,
-        "BTCUSD": 0.001,
+        "XAUUSD": 1.0,    # $1 لكل نقطة لكل lot
+        "BTCUSD": 0.001,  # $0.001 لكل نقطة لكل lot
     }
     pv = point_values.get(symbol, 1.0)
+
+    # الحجم = المبلغ المخاطر ÷ (مسافة SL × قيمة النقطة)
     lot = risk_amount / (sl_distance * pv)
 
-    # حد أقصى بناءً على الرصيد
+    # حد أقصى بناءً على الرصيد (حماية إضافية)
     if balance < 500:
         max_lot = 0.05
     elif balance < 1000:
-        max_lot = 0.1
-    elif balance < 3000:
-        max_lot = 0.2
+        max_lot = 0.08
+    elif balance < 2000:
+        max_lot = 0.15
     elif balance < 5000:
-        max_lot = 0.5
+        max_lot = 0.3
     else:
-        max_lot = 1.0
+        max_lot = 0.5
 
-    # حد أدنى لكل زوج
-    min_lot = 0.05
+    min_lot = 0.01
 
-    # تأكد إن max_lot أكبر من min_lot
-    max_lot = max(max_lot, min_lot)
+    final_lot = round(max(min_lot, min(lot, max_lot)), 2)
 
-    return round(max(0.05, min(lot, max_lot)), 2)
+    # طباعة تفصيلية للمراقبة
+    expected_loss = final_lot * sl_distance * pv
+    print(f"📐 Risk Calc | {symbol} | Balance:${balance:.0f} | Risk:{risk_pct}% (${risk_amount:.1f}) | SL dist:{sl_distance:.2f} | Lot:{final_lot} | Max loss:${expected_loss:.1f}")
+
+    return final_lot
 
 # ==========================================
 # Telegram
@@ -587,14 +595,14 @@ def run_analysis():
 
         market = next((d for d in market_data if d["symbol"] == symbol), None)
         if market:
-            # SL = H1 ATR × 1.5 مع حد أدنى ثابت لكل زوج
+            # SL = H1 ATR × 1.5 مع حد أدنى آمن لكل زوج
             min_sl_dists = {
-                "XAUUSD": 2.0,
-                "BTCUSD": 200.0,
-                }
-            atr_sl = market["h1_atr"] * 1.5
+                "XAUUSD": 15.0,   # 15 دولار كحد أدنى للذهب (بدل 2.0)
+                "BTCUSD": 400.0,  # 400 دولار كحد أدنى للبيتكوين (بدل 200)
+            }
+            atr_sl   = market["h1_atr"] * 1.5
             fixed_sl = min_sl_dists.get(symbol, 0)
-            sl_dist = max(atr_sl, fixed_sl)
+            sl_dist  = max(atr_sl, fixed_sl)
 
             if action == "BUY":
                 sl  = round(entry - sl_dist, 5)
