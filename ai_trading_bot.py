@@ -56,7 +56,15 @@ app = Flask(__name__)
 
 @app.route("/signal/<symbol>")
 def get_signal(symbol):
-    return jsonify(latest_signals.get(symbol.upper(), {"action": "WAIT", "id": 0}))
+    # لا ترسل أي signal خارج ساعات التداول — يمنع EA من تنفيذ صفقات بالليل
+    kuwait = pytz.timezone(TIMEZONE)
+    now    = datetime.now(kuwait)
+    sym    = symbol.upper()
+    if not (7 <= now.hour < 23):
+        return jsonify({"action": "WAIT", "id": 0, "reason": "outside trading hours"})
+    if now.weekday() >= 5 and sym == "XAUUSD":
+        return jsonify({"action": "WAIT", "id": 0, "reason": "weekend - gold closed"})
+    return jsonify(latest_signals.get(sym, {"action": "WAIT", "id": 0}))
 
 @app.route("/positions", methods=["POST"])
 def update_positions():
