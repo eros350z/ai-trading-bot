@@ -17,7 +17,7 @@ import pytz
 # ==========================================
 # الإعدادات
 # ==========================================
-BOT_TOKEN   = "8764834987:AAHZ_dC1TmEfTO-Pbmd1AyZQcuHsNFQZy64"
+BOT_TOKEN   = os.environ.get("BOT_TOKEN", "")
 CHAT_ID     = "6652508619"
 CLAUDE_API  = "https://api.anthropic.com/v1/messages"
 CLAUDE_KEY  = os.environ.get("CLAUDE_KEY", "")
