@@ -24,7 +24,7 @@ CLAUDE_KEY  = os.environ.get("CLAUDE_KEY", "")
 TIMEZONE    = "Asia/Kuwait"
 
 RISK_PERCENT   = 1.0
-MAX_DAILY_LOSS = 3.0
+MAX_DAILY_LOSS = 8.0
 SYMBOLS        = ["XAUUSD", "BTCUSD"]
 
 # ==========================================
@@ -383,7 +383,7 @@ HARD FILTERS — ALWAYS WAIT if any of these:
 
 RISK RULES:
 - SL = swing_low for BUY, swing_high for SELL (already calculated)
-- TP1 = 1.5x SL distance, TP2 = 2.5x, TP3 = 4x
+- TP1 = 1.5x SL distance (هذا هو الـ TP الوحيد المستخدم)
 - Minimum confidence 7/10 to trade
 
 MARKET DATA:
@@ -475,7 +475,7 @@ def calc_lot(balance, risk_pct, sl_distance, symbol):
     else:
         max_lot = 0.10
 
-    min_lot = 0.02  # الحد الأدنى 0.02 عشان Partial يشتغل (20% = 0.01)
+    min_lot = 0.03  # الحد الأدنى 0.03 عشان Partial يشتغل (20% = 0.01)
 
     final_lot = round(max(min_lot, min(lot, max_lot)), 2)
 
