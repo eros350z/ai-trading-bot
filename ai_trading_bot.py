@@ -475,7 +475,7 @@ def calc_lot(balance, risk_pct, sl_distance, symbol):
     else:
         max_lot = 0.10
 
-    min_lot = 0.01
+    min_lot = 0.02  # الحد الأدنى 0.02 عشان Partial يشتغل (20% = 0.01)
 
     final_lot = round(max(min_lot, min(lot, max_lot)), 2)
 
