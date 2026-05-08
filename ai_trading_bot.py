@@ -451,34 +451,36 @@ def calc_lot(balance, risk_pct, sl_distance, symbol):
     risk_amount = balance * (risk_pct / 100)  # المبلغ اللي نرضى نخسره
     if sl_distance <= 0: return 0.01
 
-    # قيمة كل نقطة لكل زوج (بالدولار لكل lot)
-    point_values = {
-        "XAUUSD": 1.0,    # $1 لكل نقطة لكل lot
-        "BTCUSD": 0.001,  # $0.001 لكل نقطة لكل lot
+    # قيمة كل دولار SL لكل lot (الصحيح)
+    # XAUUSD: 1 lot = 100 oz، كل $1 تحرك = $100 ربح/خسارة
+    # BTCUSD: 1 lot = 1 BTC، كل $1 تحرك = $1 ربح/خسارة
+    dollar_per_lot = {
+        "XAUUSD": 100.0,  # $100 لكل دولار تحرك لكل lot
+        "BTCUSD": 1.0,    # $1 لكل دولار تحرك لكل lot
     }
-    pv = point_values.get(symbol, 1.0)
+    dpv = dollar_per_lot.get(symbol, 1.0)
 
-    # الحجم = المبلغ المخاطر ÷ (مسافة SL × قيمة النقطة)
-    lot = risk_amount / (sl_distance * pv)
+    # الحجم = المبلغ المخاطر ÷ (مسافة SL بالدولار × قيمة الـ lot)
+    lot = risk_amount / (sl_distance * dpv)
 
-    # حد أقصى بناءً على الرصيد (حماية إضافية)
-    if balance < 500:
-        max_lot = 0.05
+    # حد أقصى صارم بناءً على الرصيد
+    if balance < 300:
+        max_lot = 0.01
+    elif balance < 500:
+        max_lot = 0.02
     elif balance < 1000:
-        max_lot = 0.08
+        max_lot = 0.03
     elif balance < 2000:
-        max_lot = 0.15
-    elif balance < 5000:
-        max_lot = 0.3
+        max_lot = 0.05
     else:
-        max_lot = 0.5
+        max_lot = 0.10
 
     min_lot = 0.01
 
     final_lot = round(max(min_lot, min(lot, max_lot)), 2)
 
     # طباعة تفصيلية للمراقبة
-    expected_loss = final_lot * sl_distance * pv
+    expected_loss = final_lot * sl_distance * dpv
     print(f"📐 Risk Calc | {symbol} | Balance:${balance:.0f} | Risk:{risk_pct}% (${risk_amount:.1f}) | SL dist:{sl_distance:.2f} | Lot:{final_lot} | Max loss:${expected_loss:.1f}")
 
     return final_lot
