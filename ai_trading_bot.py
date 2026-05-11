@@ -364,16 +364,21 @@ ANALYSIS FRAMEWORK:
 2. M15 = Trend confirmation or pullback signal
 3. M5 = Precise entry signal
 
+D1 FILTER (إلزامي — أهم شرط):
+- BUY مسموح فقط إذا D1=UP
+- SELL مسموح فقط إذا D1=DOWN
+- إذا D1 يخالف الإشارة → WAIT بغض النظر عن باقي الشروط
+
 ENTRY RULES — TWO VALID SETUPS:
 
 SETUP A (Trend Following — highest confidence):
-- BUY: H1=UP AND M15=UP AND M5 RSI between 40-62 AND price above M5 EMA9
-- SELL: H1=DOWN AND M15=DOWN AND M5 RSI between 38-60 AND price below M5 EMA9
+- BUY: D1=UP AND H1=UP AND M15=UP AND M5 RSI between 40-62 AND price above M5 EMA9
+- SELL: D1=DOWN AND H1=DOWN AND M15=DOWN AND M5 RSI between 38-60 AND price below M5 EMA9
 - Minimum confidence: 7/10
 
 SETUP B (Pullback Trading — medium confidence):
-- BUY: H1=UP AND M15=DOWN AND M5 RSI < 35 (oversold pullback into uptrend)
-- SELL: H1=DOWN AND M15=UP AND M5 RSI > 65 (overbought pullback into downtrend)
+- BUY: D1=UP AND H1=UP AND M15=DOWN AND M5 RSI < 35 (oversold pullback into uptrend)
+- SELL: D1=DOWN AND H1=DOWN AND M15=UP AND M5 RSI > 65 (overbought pullback into downtrend)
 - Minimum confidence: 7/10
 
 HARD FILTERS — ALWAYS WAIT if any of these:
@@ -392,6 +397,7 @@ MARKET DATA:
             if not d: continue
             context += f"""
 {d['symbol']} | Price: {d['price']}
+D1:  Trend={d.get('d1_trend','N/A')} (الاتجاه اليومي — أهم فلتر)
 H1:  Trend={d['h1_trend']} | EMA21={d['h1_ema21']} | EMA50={d['h1_ema50']} | RSI={d['h1_rsi']} | ATR={d['h1_atr']}
 M15: Trend={d['m15_trend']} | EMA9={d['m15_ema9']} | EMA21={d['m15_ema21']} | RSI={d['m15_rsi']} | ATR={d['m15_atr']}
 M5:  EMA9={d['m5_ema9']} | EMA21={d['m5_ema21']} | RSI={d['m5_rsi']} | Last5={d['m5_last5']}
@@ -475,7 +481,7 @@ def calc_lot(balance, risk_pct, sl_distance, symbol):
     else:
         max_lot = 0.10
 
-    min_lot = 0.03  # الحد الأدنى 0.03 عشان Partial يشتغل (20% = 0.01)
+    min_lot = 0.05  # الحد الأدنى 0.05 مع D1 فلتر (Partial: 20% = 0.01)
 
     final_lot = round(max(min_lot, min(lot, max_lot)), 2)
 
