@@ -495,6 +495,7 @@ def calc_lot(balance, risk_pct, sl_distance, symbol):
 # Telegram
 # ==========================================
 def send_telegram(msg):
+    return  # Telegram disabled
     try:
         r = requests.post(
             f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
@@ -527,7 +528,7 @@ def run_analysis():
     # انتظر حتى الـ EA يرسل الـ positions بعد الريستارت
     if not positions_initialized:
         print("⏳ Waiting for EA to report open positions - skipping this cycle")
-        send_telegram("⏳ Bot restarted - waiting for EA position sync before trading...")
+        # send_telegram("⏳ Bot restarted - waiting for EA position sync before trading...")
         return
 
     # تصفير يوم جديد (بتوقيت الكويت)
@@ -537,7 +538,7 @@ def run_analysis():
         last_day       = now.date()
         stoppedToday   = False
         print("📅 New day reset (Kuwait time)")
-        send_telegram("📅 يوم جديد — البوت شغال من جديد ✅")
+        # send_telegram("📅 يوم جديد — البوت شغال من جديد ✅")
 
     # ساعات التداول (7 صباحاً - 11 مساءً بتوقيت الكويت)
     TRADING_START = 7
@@ -557,7 +558,7 @@ def run_analysis():
         if not stoppedToday:
             stoppedToday = True
             print(f"🛑 Daily loss limit reached: {daily_pnl}%")
-            send_telegram(f"🛑 وصلنا لحد الخسارة اليومي ({daily_pnl:.2f}%) — البوت متوقف لباقي اليوم")
+            # send_telegram(f"🛑 وصلنا لحد الخسارة اليومي ({daily_pnl:.2f}%) — البوت متوقف لباقي اليوم")
         return
 
     # الأخبار
@@ -661,23 +662,7 @@ def run_analysis():
         }
         print(f"📡 Signal updated | {symbol} | {action} | ID:{signal_counter}")
 
-        # Telegram
-        icon = "🟢" if action == "BUY" else "🔴"
-        send_telegram(f"""{icon} AI Signal v2
-Symbol: {symbol}
-Action: {action}
-Confidence: {conf}/10
-Reason: {reason}
----
-Lot: {lot}
-Entry: {entry}
-SL: {sl}
-TP1: {decision.get('tp1')}
-TP2: {decision.get('tp2')}
-TP3: {decision.get('tp3')}
----
-{now.strftime('%Y-%m-%d %H:%M')} Kuwait
-[H1+M15+M5 Analysis]""")
+        # Telegram disabled
 
 # ==========================================
 # تقرير يومي
@@ -686,13 +671,7 @@ def daily_report():
     kuwait_tz = pytz.timezone(TIMEZONE)
     now = datetime.now(kuwait_tz)
     if now.weekday() >= 5: return
-    send_telegram(f"""📊 Daily Report v2
-Date: {now.strftime('%Y-%m-%d')}
-Balance: ${real_balance:,.2f}
-P&L: {'+' if daily_pnl > 0 else ''}{daily_pnl:.2f}%
-Status: {'🟢 Active' if daily_pnl > -MAX_DAILY_LOSS else '🛑 Stopped'}
-Symbols: {len(SYMBOLS)}
-Strategy: H1+M15+M5 Multi-Timeframe""")
+    pass  # Telegram disabled
 
 # ==========================================
 # تشغيل
